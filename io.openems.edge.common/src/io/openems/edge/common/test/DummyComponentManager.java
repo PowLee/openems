@@ -9,6 +9,8 @@ import java.util.concurrent.CompletableFuture;
 
 import org.osgi.service.component.ComponentContext;
 
+import com.google.gson.JsonObject;
+
 import io.openems.common.exceptions.OpenemsError;
 import io.openems.common.exceptions.OpenemsError.OpenemsNamedException;
 import io.openems.common.jsonrpc.base.JsonrpcRequest;
@@ -29,6 +31,7 @@ public class DummyComponentManager implements ComponentManager {
 
 	private final List<OpenemsComponent> components = new ArrayList<>();
 	private final Clock clock;
+	private JsonObject edgeConfigJson;
 
 	public DummyComponentManager() {
 		this(Clock.systemDefaultZone());
@@ -62,7 +65,7 @@ public class DummyComponentManager implements ComponentManager {
 
 	/**
 	 * Specific for this Dummy implementation.
-	 * 
+	 *
 	 * @param component
 	 */
 	public DummyComponentManager addComponent(OpenemsComponent component) {
@@ -72,9 +75,26 @@ public class DummyComponentManager implements ComponentManager {
 		return this;
 	}
 
+	/**
+	 * Sets a {@link EdgeConfig} json.
+	 *
+	 * @param the {@link EdgeConfig} json
+	 */
+	public void setConfigJson(JsonObject json) {
+		this.edgeConfigJson = json;
+	}
+
 	@Override
 	public EdgeConfig getEdgeConfig() {
-		return new EdgeConfig();
+		if (this.edgeConfigJson == null) {
+			return new EdgeConfig();
+		}
+		try {
+			return EdgeConfig.fromJson(this.edgeConfigJson);
+		} catch (OpenemsNamedException e) {
+			e.printStackTrace();
+			throw new IllegalArgumentException(e.getMessage());
+		}
 	}
 
 	@Override
@@ -125,7 +145,7 @@ public class DummyComponentManager implements ComponentManager {
 
 	/**
 	 * Handles a {@link GetEdgeConfigRequest}.
-	 * 
+	 *
 	 * @param user    the {@link User}
 	 * @param request the {@link GetEdgeConfigRequest}
 	 * @return the Future JSON-RPC Response
@@ -133,8 +153,8 @@ public class DummyComponentManager implements ComponentManager {
 	 */
 	private CompletableFuture<JsonrpcResponseSuccess> handleGetEdgeConfigRequest(User user,
 			GetEdgeConfigRequest request) throws OpenemsNamedException {
-		EdgeConfig config = this.getEdgeConfig();
-		GetEdgeConfigResponse response = new GetEdgeConfigResponse(request.getId(), config);
+		var config = this.getEdgeConfig();
+		var response = new GetEdgeConfigResponse(request.getId(), config);
 		return CompletableFuture.completedFuture(response);
 	}
 

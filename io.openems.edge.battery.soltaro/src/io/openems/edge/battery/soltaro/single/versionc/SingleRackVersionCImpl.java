@@ -15,8 +15,8 @@ import org.osgi.service.component.annotations.ReferenceCardinality;
 import org.osgi.service.component.annotations.ReferencePolicy;
 import org.osgi.service.component.annotations.ReferencePolicyOption;
 import org.osgi.service.event.Event;
-import org.osgi.service.event.EventConstants;
 import org.osgi.service.event.EventHandler;
+import org.osgi.service.event.propertytypes.EventTopics;
 import org.osgi.service.metatype.annotations.Designate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -62,11 +62,12 @@ import io.openems.edge.common.taskmanager.Priority;
 @Component(//
 		name = "Bms.Soltaro.SingleRack.VersionC", //
 		immediate = true, //
-		configurationPolicy = ConfigurationPolicy.REQUIRE, //
-		property = { //
-				EventConstants.EVENT_TOPIC + "=" + EdgeEventConstants.TOPIC_CYCLE_BEFORE_PROCESS_IMAGE, //
-				EventConstants.EVENT_TOPIC + "=" + EdgeEventConstants.TOPIC_CYCLE_AFTER_PROCESS_IMAGE //
-		})
+		configurationPolicy = ConfigurationPolicy.REQUIRE //
+)
+@EventTopics({ //
+		EdgeEventConstants.TOPIC_CYCLE_BEFORE_PROCESS_IMAGE, //
+		EdgeEventConstants.TOPIC_CYCLE_AFTER_PROCESS_IMAGE //
+})
 public class SingleRackVersionCImpl extends AbstractOpenemsModbusComponent implements SingleRackVersionC, Battery,
 		ModbusComponent, OpenemsComponent, EventHandler, ModbusSlave, StartStoppable {
 
@@ -98,6 +99,7 @@ public class SingleRackVersionCImpl extends AbstractOpenemsModbusComponent imple
 		);
 	}
 
+	@Override
 	@Reference(policy = ReferencePolicy.STATIC, policyOption = ReferencePolicyOption.GREEDY, cardinality = ReferenceCardinality.MANDATORY)
 	protected void setModbus(BridgeModbus modbus) {
 		super.setModbus(modbus);
@@ -131,22 +133,22 @@ public class SingleRackVersionCImpl extends AbstractOpenemsModbusComponent imple
 	/**
 	 * Calculates the Capacity as Capacity per module multiplied with number of
 	 * modules and sets the CAPACITY channel.
-	 * 
+	 *
 	 * @param numberOfModules the number of battery modules
 	 */
 	private void calculateCapacity(Integer numberOfModules) {
-		int capacity = numberOfModules * ModuleType.MODULE_3_5_KWH.getCapacity_Wh();
+		var capacity = numberOfModules * ModuleType.MODULE_3_5_KWH.getCapacity_Wh();
 		this._setCapacity(capacity);
 	}
 
 	/**
 	 * Gets the Number of Modules.
-	 * 
+	 *
 	 * @return the Number of Modules as a {@link CompletableFuture}.
 	 * @throws OpenemsException on error
 	 */
 	private CompletableFuture<Integer> getNumberOfModules() {
-		final CompletableFuture<Integer> result = new CompletableFuture<Integer>();
+		final var result = new CompletableFuture<Integer>();
 		try {
 			ModbusUtils.readELementOnce(this.getModbusProtocol(), new UnsignedWordElement(0x20C1), true)
 					.thenAccept(numberOfModules -> {
@@ -161,6 +163,7 @@ public class SingleRackVersionCImpl extends AbstractOpenemsModbusComponent imple
 		return result;
 	}
 
+	@Override
 	@Deactivate
 	protected void deactivate() {
 		super.deactivate();
@@ -194,7 +197,7 @@ public class SingleRackVersionCImpl extends AbstractOpenemsModbusComponent imple
 		this._setStartStop(StartStop.UNDEFINED);
 
 		// Prepare Context
-		Context context = new Context(this, this.config);
+		var context = new Context(this, this.config);
 
 		// Call the StateMachine
 		try {
@@ -218,7 +221,7 @@ public class SingleRackVersionCImpl extends AbstractOpenemsModbusComponent imple
 
 	@Override
 	protected ModbusProtocol defineModbusProtocol() throws OpenemsException {
-		ModbusProtocol protocol = new ModbusProtocol(this, //
+		var protocol = new ModbusProtocol(this, //
 				new FC6WriteRegisterTask(0x2004, //
 						m(SingleRackVersionC.ChannelId.SYSTEM_RESET, new UnsignedWordElement(0x2004)) //
 				), //
@@ -457,7 +460,7 @@ public class SingleRackVersionCImpl extends AbstractOpenemsModbusComponent imple
 								.bit(12, SingleRackVersionC.ChannelId.SLAVE_BMS_INIT)//
 						))); //
 		{
-			AbstractModbusElement<?>[] elements = new AbstractModbusElement<?>[] {
+			AbstractModbusElement<?>[] elements = {
 					m(SingleRackVersionC.ChannelId.PRE_ALARM_CELL_OVER_VOLTAGE_ALARM, new UnsignedWordElement(0x2080)), //
 					m(SingleRackVersionC.ChannelId.PRE_ALARM_CELL_OVER_VOLTAGE_RECOVER,
 							new UnsignedWordElement(0x2081)), //
@@ -524,7 +527,7 @@ public class SingleRackVersionCImpl extends AbstractOpenemsModbusComponent imple
 
 		// WARN_LEVEL1 (Level1 warning registers RW)
 		{
-			AbstractModbusElement<?>[] elements = new AbstractModbusElement<?>[] {
+			AbstractModbusElement<?>[] elements = {
 					m(SingleRackVersionC.ChannelId.LEVEL1_CELL_OVER_VOLTAGE_PROTECTION,
 							new UnsignedWordElement(0x2040)), //
 					m(SingleRackVersionC.ChannelId.LEVEL1_CELL_OVER_VOLTAGE_RECOVER, new UnsignedWordElement(0x2041)), //
@@ -591,7 +594,7 @@ public class SingleRackVersionCImpl extends AbstractOpenemsModbusComponent imple
 
 		// WARN_LEVEL2 (Level2 Protection registers RW)
 		{
-			AbstractModbusElement<?>[] elements = new AbstractModbusElement<?>[] {
+			AbstractModbusElement<?>[] elements = {
 					m(SingleRackVersionC.ChannelId.LEVEL2_CELL_OVER_VOLTAGE_PROTECTION,
 							new UnsignedWordElement(0x2400)), //
 					m(SingleRackVersionC.ChannelId.LEVEL2_CELL_OVER_VOLTAGE_RECOVER, new UnsignedWordElement(0x2401)), //
@@ -670,12 +673,12 @@ public class SingleRackVersionCImpl extends AbstractOpenemsModbusComponent imple
 		 * Add tasks for cell voltages and temperatures according to the number of
 		 * slaves, one task per module is created Cell voltages
 		 */
-		Consumer<CellChannelFactory.Type> addCellChannels = (type) -> {
-			for (int i = 0; i < numberOfModules; i++) {
-				AbstractModbusElement<?>[] elements = new AbstractModbusElement<?>[type.getSensorsPerModule()];
-				for (int j = 0; j < type.getSensorsPerModule(); j++) {
-					int sensorIndex = i * type.getSensorsPerModule() + j;
-					io.openems.edge.common.channel.ChannelId channelId = CellChannelFactory.create(type, sensorIndex);
+		Consumer<CellChannelFactory.Type> addCellChannels = type -> {
+			for (var i = 0; i < numberOfModules; i++) {
+				var elements = new AbstractModbusElement<?>[type.getSensorsPerModule()];
+				for (var j = 0; j < type.getSensorsPerModule(); j++) {
+					var sensorIndex = i * type.getSensorsPerModule() + j;
+					var channelId = CellChannelFactory.create(type, sensorIndex);
 					// Register the Channel at this Component
 					this.addChannel(channelId);
 					// Add the Modbus Element and map it to the Channel
@@ -687,7 +690,7 @@ public class SingleRackVersionCImpl extends AbstractOpenemsModbusComponent imple
 
 				}
 				// Add a Modbus read task for this module
-				int startAddress = type.getOffset() + i * type.getSensorsPerModule();
+				var startAddress = type.getOffset() + i * type.getSensorsPerModule();
 				try {
 					this.getModbusProtocol().addTask(//
 							new FC3ReadRegistersTask(startAddress, Priority.LOW, elements));
@@ -711,7 +714,7 @@ public class SingleRackVersionCImpl extends AbstractOpenemsModbusComponent imple
 		);
 	}
 
-	private AtomicReference<StartStop> startStopTarget = new AtomicReference<StartStop>(StartStop.UNDEFINED);
+	private final AtomicReference<StartStop> startStopTarget = new AtomicReference<>(StartStop.UNDEFINED);
 
 	@Override
 	public void setStartStop(StartStop value) {

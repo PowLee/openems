@@ -130,6 +130,12 @@ export class Utils {
     }
   }
 
+  public static getRandomInteger(min: number, max: number) {
+    min = Math.ceil(min);
+    max = Math.floor(max);
+    return Math.floor(Math.random() * (max - min)) + min;
+  }
+
   /**
    * Safely rounds a - possibly 'null' - value: Math.round(v)
    * 
@@ -222,7 +228,7 @@ export class Utils {
    * @returns converted value
    */
   public static CONVERT_SECONDS_TO_DATE_FORMAT = (value: any): string => {
-    return format(new Date(value * 1000), 'HH:mm:ss')
+    return new Date(value * 1000).toLocaleTimeString()
   }
 
   public static CONVERT_TO_PERCENT = (value: any): string => {
@@ -354,5 +360,14 @@ export class Utils {
     result = Math.min(result, 100);
 
     return result;
+  }
+
+  /**
+   * Rounds values between 0 and -1kW to 0
+   * 
+   * @param value the value to convert
+   */
+  public static roundSlightlyNegativeValues(value: number) {
+    return (value > -0.49 && value < 0) ? 0 : value;
   }
 }
