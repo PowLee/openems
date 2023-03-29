@@ -1,14 +1,16 @@
 package io.openems.edge.controller.api.websocket;
 
+import java.time.ZonedDateTime;
 import java.util.List;
 
 import com.google.common.collect.Lists;
 
 import io.openems.common.OpenemsConstants;
-import io.openems.common.jsonrpc.response.AuthenticateResponse.EdgeMetadata;
+import io.openems.common.jsonrpc.response.GetEdgesResponse.EdgeMetadata;
 import io.openems.common.session.Role;
 
 public class Utils {
+
 	/**
 	 * Gets the EdgeMetadata for one Edge.
 	 *
@@ -22,7 +24,9 @@ public class Utils {
 				WebsocketApi.EDGE_PRODUCT_TYPE, // Product-Type
 				OpenemsConstants.VERSION, // Version
 				role, // Role
-				true // Is Online
+				true, // Is Online
+				ZonedDateTime.now() // now
 		));
 	}
+
 }

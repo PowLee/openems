@@ -3,7 +3,6 @@ package io.openems.backend.timedata.dummy;
 import java.time.ZonedDateTime;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
@@ -20,7 +19,7 @@ import com.google.common.collect.TreeBasedTable;
 import com.google.gson.JsonElement;
 
 import io.openems.backend.common.component.AbstractOpenemsBackendComponent;
-import io.openems.backend.common.timedata.EdgeCache;
+import io.openems.backend.common.edgewebsocket.EdgeCache;
 import io.openems.backend.common.timedata.Timedata;
 import io.openems.common.exceptions.OpenemsError.OpenemsNamedException;
 import io.openems.common.exceptions.OpenemsException;
@@ -34,12 +33,15 @@ public class TimedataDummy extends AbstractOpenemsBackendComponent implements Ti
 	private final Logger log = LoggerFactory.getLogger(TimedataDummy.class);
 	private final Map<String, EdgeCache> edgeCacheMap = new HashMap<>();
 
+	private Config config;
+
 	public TimedataDummy() {
 		super("Timedata.Dummy");
 	}
 
 	@Activate
 	private void activate(Config config) throws OpenemsException {
+		this.config = config;
 		this.logInfo(this.log, "Activate");
 	}
 
@@ -49,16 +51,7 @@ public class TimedataDummy extends AbstractOpenemsBackendComponent implements Ti
 	}
 
 	@Override
-	public Optional<JsonElement> getChannelValue(String edgeId, ChannelAddress channelAddress) {
-		var edgeCache = this.edgeCacheMap.get(edgeId);
-		if (edgeCache != null) {
-			return edgeCache.getChannelValue(channelAddress);
-		}
-		return Optional.empty();
-	}
-
-	@Override
-	public void write(String edgeId, TreeBasedTable<Long, ChannelAddress, JsonElement> data) throws OpenemsException {
+	public void write(String edgeId, TreeBasedTable<Long, String, JsonElement> data) throws OpenemsException {
 		// get existing or create new EdgeCache
 		var edgeCache = this.edgeCacheMap.get(edgeId);
 		if (edgeCache == null) {
@@ -66,9 +59,8 @@ public class TimedataDummy extends AbstractOpenemsBackendComponent implements Ti
 			this.edgeCacheMap.put(edgeId, edgeCache);
 		}
 
-		// Complement incoming data with data from Cache, because only changed values
-		// are transmitted
-		edgeCache.complementDataFromCache(edgeId, data.rowMap());
+		// Update the Data Cache
+		edgeCache.update(data.rowMap());
 	}
 
 	@Override
@@ -94,4 +86,8 @@ public class TimedataDummy extends AbstractOpenemsBackendComponent implements Ti
 		return new TreeMap<>();
 	}
 
+	@Override
+	public String id() {
+		return this.config.id();
+	}
 }

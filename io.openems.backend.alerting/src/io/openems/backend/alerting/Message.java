@@ -1,41 +1,45 @@
 package io.openems.backend.alerting;
 
-import java.time.ZoneId;
 import java.time.ZonedDateTime;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Objects;
 
-import io.openems.backend.common.metadata.EdgeUser;
+import com.google.gson.JsonObject;
 
 /**
  * Properties for one notification.
  */
-public class Message implements Comparable<Message> {
-	private final List<EdgeUser> userList;
-	private final ZonedDateTime notifyStamp;
+public abstract class Message implements Comparable<Message> {
+	private final String id;
 
-	public Message(ZonedDateTime notifyStamp) {
-		this(notifyStamp, new ArrayList<>());
+	public Message(String messageId) {
+		this.id = messageId;
 	}
 
-	public Message(ZonedDateTime notifyStamp, List<EdgeUser> users) {
-		this.userList = users;
-		this.notifyStamp = notifyStamp;
+	public String getId() {
+		return this.id;
 	}
 
-	public ZonedDateTime getTimeStamp() {
-		return this.notifyStamp.withZoneSameInstant(ZoneId.systemDefault());
+	public boolean isValid() {
+		return this.id != null && this.getNotifyStamp() != null;
 	}
 
-	@Override
-	public int compareTo(Message o) {
-		return this.notifyStamp.compareTo(o.notifyStamp);
-	}
+	/**
+	 * Returns the time stamp at which this message is supposed to be sent.
+	 *
+	 * @return {@link ZonedDateTime} at which to send this message
+	 */
+	public abstract ZonedDateTime getNotifyStamp();
+
+	/**
+	 * Get attributes as JsonObject for Mailer.
+	 *
+	 * @return JsonObject
+	 */
+	public abstract JsonObject getParams();
 
 	@Override
 	public int hashCode() {
-		return Objects.hash(this.notifyStamp);
+		return Objects.hash(this.id);
 	}
 
 	@Override
@@ -43,27 +47,18 @@ public class Message implements Comparable<Message> {
 		if (this == obj) {
 			return true;
 		}
-		if ((obj == null) || (getClass() != obj.getClass())) {
+		if (obj == null || this.getClass() != obj.getClass()) {
 			return false;
 		}
-		Message other = (Message) obj;
-		return Objects.equals(this.notifyStamp, other.notifyStamp);
+		var other = (Message) obj;
+		return Objects.equals(this.id, other.id);
 	}
 
-	/**
-	 * Add User to UserList.
-	 *
-	 * @param user to add
-	 */
-	public void addUser(EdgeUser user) {
-		this.userList.add(user);
-	}
-
-	public List<EdgeUser> getUser() {
-		return this.userList;
-	}
-
-	public ZonedDateTime getNotifyStamp() {
-		return this.notifyStamp;
+	@Override
+	public int compareTo(Message o) {
+		if (o == null) {
+			return -1;
+		}
+		return this.getNotifyStamp().compareTo(o.getNotifyStamp());
 	}
 }

@@ -94,6 +94,7 @@ public class QueryHistoricTimeseriesExportXlsxResponse extends Base64PayloadResp
 	 * @param toDate         the end date of the export
 	 * @param historicData   the power data per channel and timestamp
 	 * @param historicEnergy the energy data, one value per channel
+	 * @param language       the {@link Language}
 	 * @throws IOException           on error
 	 * @throws OpenemsNamedException on error
 	 */
@@ -129,8 +130,10 @@ public class QueryHistoricTimeseriesExportXlsxResponse extends Base64PayloadResp
 				SortedMap<ChannelAddress, JsonElement> energyData, Language language)
 				throws IOException, OpenemsNamedException {
 			byte[] payload = {};
-			try (var os = new ByteArrayOutputStream()) {
-				var wb = new Workbook(os, OpenemsConstants.MANUFACTURER_MODEL, null);
+			try (//
+					var os = new ByteArrayOutputStream();
+					var wb = new Workbook(os, OpenemsConstants.MANUFACTURER_MODEL, null) //
+			) {
 				var ws = wb.newWorksheet("Export");
 
 				Locale currentLocale = language.getLocal();
@@ -154,10 +157,11 @@ public class QueryHistoricTimeseriesExportXlsxResponse extends Base64PayloadResp
 		/**
 		 * Adds basic information like the Edge-ID, date of creation,...
 		 *
-		 * @param ws       the {@link Worksheet}
-		 * @param edgeId   the edgeId number
-		 * @param fromDate the fromdate the excel exported from
-		 * @param toDate   the todate the excel exported to
+		 * @param ws                the {@link Worksheet}
+		 * @param edgeId            the edgeId number
+		 * @param fromDate          the fromdate the excel exported from
+		 * @param toDate            the todate the excel exported to
+		 * @param translationBundle the {@link ResourceBundle} for translations
 		 */
 		protected static void addBasicInfo(Worksheet ws, String edgeId, ZonedDateTime fromDate, ZonedDateTime toDate,
 				ResourceBundle translationBundle) {
@@ -185,8 +189,9 @@ public class QueryHistoricTimeseriesExportXlsxResponse extends Base64PayloadResp
 		/**
 		 * Adds the energy data header and values.
 		 *
-		 * @param ws   the {@link Worksheet}
-		 * @param data the energy data map
+		 * @param ws                the {@link Worksheet}
+		 * @param data              the energy data map
+		 * @param translationBundle the {@link ResourceBundle} for translations
 		 * @throws OpenemsNamedException on error
 		 */
 		protected static void addEnergyData(Worksheet ws, SortedMap<ChannelAddress, JsonElement> data,
@@ -219,8 +224,9 @@ public class QueryHistoricTimeseriesExportXlsxResponse extends Base64PayloadResp
 		/**
 		 * Adds the power data header and values.
 		 *
-		 * @param ws   the {@link Worksheet}
-		 * @param data the power data map
+		 * @param ws                the {@link Worksheet}
+		 * @param data              the power data map
+		 * @param translationBundle the {@link ResourceBundle} for translations
 		 * @throws OpenemsNamedException on error
 		 */
 		protected static void addPowerData(Worksheet ws,

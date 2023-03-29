@@ -1,24 +1,30 @@
-import { ErrorHandler, Injectable } from '@angular/core';
+import { Injectable } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { ModalController, ToastController } from '@ionic/angular';
-import { TranslateService } from '@ngx-translate/core';
+import { LangChangeEvent, TranslateService } from '@ngx-translate/core';
 import { NgxSpinnerService } from 'ngx-spinner';
-import { BehaviorSubject, Subject, Subscription } from 'rxjs';
-import { filter, first, map } from 'rxjs/operators';
+import { BehaviorSubject, Subject } from 'rxjs';
+import { filter, first, take } from 'rxjs/operators';
 import { environment } from 'src/environments';
 import { Edge } from '../edge/edge';
 import { EdgeConfig } from '../edge/edgeconfig';
 import { JsonrpcResponseError } from '../jsonrpc/base';
+import { GetEdgeRequest } from '../jsonrpc/request/getEdgeRequest';
+import { GetEdgesRequest } from '../jsonrpc/request/getEdgesRequest';
 import { QueryHistoricTimeseriesEnergyRequest } from '../jsonrpc/request/queryHistoricTimeseriesEnergyRequest';
+import { GetEdgeResponse } from '../jsonrpc/response/getEdgeResponse';
+import { GetEdgesResponse } from '../jsonrpc/response/getEdgesResponse';
 import { QueryHistoricTimeseriesEnergyResponse } from '../jsonrpc/response/queryHistoricTimeseriesEnergyResponse';
 import { User } from '../jsonrpc/shared';
 import { ChannelAddress } from '../shared';
-import { Language, LanguageTag } from '../translate/language';
+import { Language } from '../type/language';
+import { Role } from '../type/role';
+import { AbstractService } from './abstractservice';
 import { DefaultTypes } from './defaulttypes';
 import { Websocket } from './websocket';
 
 @Injectable()
-export class Service implements ErrorHandler {
+export class Service extends AbstractService {
 
   public static readonly TIMEOUT = 15_000;
 
@@ -67,58 +73,42 @@ export class Service implements ErrorHandler {
     public modalCtrl: ModalController,
     public translate: TranslateService,
   ) {
+    super();
     // add language
-    translate.addLangs(Language.getLanguages());
+    translate.addLangs(Language.ALL.map(l => l.key));
     // this language will be used as a fallback when a translation isn't found in the current language
-    translate.setDefaultLang(LanguageTag.DE);
+    translate.setDefaultLang(Language.DEFAULT.key);
+
     // initialize history period
     this.historyPeriod = new DefaultTypes.HistoryPeriod(new Date(), new Date());
+
+    // React on Language Change and update language
+    translate.onLangChange.subscribe((event: LangChangeEvent) => {
+      this.setLang(Language.getByKey(event.lang));
+    });
   }
 
-  /**
-   * Set the application language
-   */
-  public setLang(id: LanguageTag) {
-    this.translate.use(id);
+  public setLang(language: Language) {
+    if (language !== null) {
+      this.translate.use(language.key);
+    } else {
+      this.translate.use(Language.DEFAULT.key);
+    }
     // TODO set locale for date-fns: https://date-fns.org/docs/I18n
   }
 
-  /**
-   * Returns the configured language for docs.fenecon.de
-   */
   public getDocsLang(): string {
-    if (this.translate.currentLang == "German") {
+    if (this.translate.currentLang == "de") {
       return "de";
     } else {
       return "en";
     }
   }
 
-  /**
-   * Convert the browser language in Language Tag
-   */
-  public browserLangToLangTag(browserLang: string): LanguageTag {
-    switch (browserLang) {
-      case "de": return LanguageTag.DE;
-      case "en": return LanguageTag.EN;
-      case "es": return LanguageTag.ES;
-      case "nl": return LanguageTag.NL;
-      case "cz": return LanguageTag.CZ;
-      case "fr": return LanguageTag.FR;
-      default: return LanguageTag.DE;
-    }
-  }
-
-  /**
-   * Shows a nofication using toastr
-   */
   public notify(notification: DefaultTypes.Notification) {
     this.notificationEvent.next(notification);
   }
 
-  /**
-   * Handles an application error
-   */
   public handleError(error: any) {
     console.error(error);
     // TODO: show notification
@@ -129,89 +119,46 @@ export class Service implements ErrorHandler {
     // this.notify(notification);
   }
 
-  /**
-   * Parses the route params and sets the current edge
-   */
-  public setCurrentComponent(currentPageTitle: string, activatedRoute: ActivatedRoute): Promise<Edge> {
-    return new Promise((resolve) => {
+  public setCurrentComponent(currentPageTitle: string | { languageKey: string }, activatedRoute: ActivatedRoute): Promise<Edge> {
+    return new Promise((resolve, reject) => {
       // Set the currentPageTitle only once per ActivatedRoute
       if (this.currentActivatedRoute != activatedRoute) {
-        if (currentPageTitle == null || currentPageTitle.trim() === '') {
-          this.currentPageTitle = environment.uiTitle;
+        if (typeof currentPageTitle === 'string') {
+          // Use given page title directly
+          if (currentPageTitle == null || currentPageTitle.trim() === '') {
+            this.currentPageTitle = environment.uiTitle;
+          } else {
+            this.currentPageTitle = currentPageTitle;
+          }
+
         } else {
-          this.currentPageTitle = currentPageTitle;
+          // Translate from key
+          this.translate.get(currentPageTitle.languageKey).pipe(
+            take(1),
+          ).subscribe(title => this.currentPageTitle = title);
         }
       }
       this.currentActivatedRoute = activatedRoute;
 
-      // Get Edge-ID. If not existing -> resolve null
-      let route = activatedRoute.snapshot;
-      let edgeId = route.params["edgeId"];
-      if (edgeId == null) {
-        // allow modal components to get edge id
-        if (route.url.length == 0) {
-          this.getCurrentEdge().then(edge => {
-            resolve(edge);
-          })
-        } else {
-          resolve(null);
-        }
-      }
-
-      let subscription: Subscription = null;
-      let onError = () => {
-        if (subscription != null) {
-          subscription.unsubscribe();
-        }
-        setCurrentEdge.apply(null);
-        // redirect to index
-        this.router.navigate(['/index']);
-      }
-
-      let timeout = setTimeout(() => {
-        console.error("Timeout while setting current edge");
-        //  onError();
-      }, Service.TIMEOUT);
-
-      let setCurrentEdge = (edge: Edge) => {
-        clearTimeout(timeout);
-        if (edge != this.currentEdge.value) {
-          if (edge != null) {
-            edge.markAsCurrentEdge(this.websocket);
-          }
-          this.currentEdge.next(edge);
-        }
+      this.getCurrentEdge().then(edge => {
         resolve(edge);
-      }
-
-      subscription = this.metadata
-        .pipe(
-          filter(metadata => metadata != null && edgeId in metadata.edges),
-          first(),
-          map(metadata => metadata.edges[edgeId])
-        )
-        .subscribe(edge => {
-          setCurrentEdge(edge);
-        }, error => {
-          console.error("Error while setting current edge: ", error);
-          onError();
-        })
+      }).catch(reject)
     });
   }
 
-  /**
-   * Gets the current Edge - or waits for a Edge if it is not available yet.
-   */
   public getCurrentEdge(): Promise<Edge> {
-    return this.currentEdge.pipe(
-      filter(edge => edge != null),
-      first()
-    ).toPromise();
+    // TODO maybe timeout
+    return new Promise<Edge>((resolve) => {
+      this.currentEdge.pipe(
+        filter(edge => edge != null),
+        first(),
+      ).toPromise().then(resolve);
+      if (this.currentEdge.value) {
+        resolve(this.currentEdge.value)
+      }
+    })
   }
 
-  /**
-   * Gets the EdgeConfig of the current Edge - or waits for Edge and Config if they are not available yet.
-   */
   public getConfig(): Promise<EdgeConfig> {
     return new Promise<EdgeConfig>((resolve, reject) => {
       this.getCurrentEdge().then(edge => {
@@ -226,34 +173,18 @@ export class Service implements ErrorHandler {
     });
   }
 
-  /**
-   * Handles being logged out.
-   */
   public onLogout() {
     this.currentEdge.next(null);
     this.metadata.next(null);
     this.router.navigate(['/index']);
   }
 
-  /**
-   * Gets the ChannelAddresses for cumulated values that should be queried.
-   * 
-   * @param edge the current Edge
-   */
   public getChannelAddresses(edge: Edge, channels: ChannelAddress[]): Promise<ChannelAddress[]> {
     return new Promise((resolve) => {
       resolve(channels);
     });
   };
 
-  /**
-   * Sends the Historic Timeseries Data Query and makes sure the result is not empty.
-   * 
-   * @param fromDate the From-Date
-   * @param toDate   the To-Date
-   * @param edge     the current Edge
-   * @param ws       the websocket
-   */
   public queryEnergy(fromDate: Date, toDate: Date, channels: ChannelAddress[]): Promise<QueryHistoricTimeseriesEnergyResponse> {
     // keep only the date, without time
     fromDate.setHours(0, 0, 0, 0);
@@ -335,35 +266,112 @@ export class Service implements ErrorHandler {
     return response;
   }
 
+  /**
+   * Gets the page for the given number.
+   * 
+   * @param page the page number
+   * @param query the query to restrict the edgeId
+   * @param limit the number of edges to be retrieved
+   * @returns a Promise
+   */
+  public getEdges(page: number, query?: string, limit?: number): Promise<Edge[]> {
+    return new Promise<Edge[]>((resolve, reject) => {
+      this.websocket.sendSafeRequest(
+        new GetEdgesRequest({
+          page: page,
+          ...(query && query != "" && { query: query }),
+          ...(limit && { limit: limit })
+        })).then((response) => {
+
+          const result = (response as GetEdgesResponse).result;
+
+          // TODO change edges-map to array or other way around
+          let value = this.metadata.value;
+          let mappedResult = [];
+          for (let edge of result.edges) {
+            let mappedEdge = new Edge(
+              edge.id,
+              edge.comment,
+              edge.producttype,
+              ("version" in edge) ? edge["version"] : "0.0.0",
+              Role.getRole(edge.role.toString()),
+              edge.isOnline,
+              edge.lastmessage
+            );
+            value.edges[edge.id] = mappedEdge
+            mappedResult.push(mappedEdge)
+          }
+
+          this.metadata.next(value)
+          resolve(mappedResult)
+        }).catch((err) => {
+          reject(err)
+        })
+    })
+  }
+
+  /**
+   * Updates the currentEdge in metadata
+   * 
+   * @param edgeId the edgeId
+   * @returns a empty Promise
+   */
+  public updateCurrentEdge(edgeId: string): Promise<Edge> {
+    return new Promise<Edge>((resolve, reject) => {
+      const existingEdge = this.metadata.value?.edges[edgeId];
+      if (existingEdge) {
+        this.currentEdge.next(existingEdge)
+        resolve(existingEdge);
+        return;
+      }
+      this.websocket.sendSafeRequest(new GetEdgeRequest({ edgeId: edgeId })).then((response) => {
+        let edgeData = (response as GetEdgeResponse).result.edge
+        let value = this.metadata.value;
+        const currentEdge = new Edge(
+          edgeData.id,
+          edgeData.comment,
+          edgeData.producttype,
+          ("version" in edgeData) ? edgeData["version"] : "0.0.0",
+          Role.getRole(edgeData.role.toString()),
+          edgeData.isOnline,
+          edgeData.lastmessage
+        );
+
+        this.currentEdge.next(currentEdge)
+        value.edges[edgeData.id] = currentEdge
+        this.metadata.next(value)
+        resolve(currentEdge)
+      }).catch(reject)
+    })
+  }
+
   private queryEnergyQueue: {
     fromDate: Date, toDate: Date, channels: ChannelAddress[], promises: { resolve, reject }[]
   }[] = [];
   private queryEnergyTimeout: any = null;
 
-
-  /**
-   * Start NGX-Spinner
-   * 
-   * Spinner will appear inside html tag only
-   * 
-   * @example <ngx-spinner name="YOURSELECTOR"></ngx-spinner>
-   * 
-   * @param selector selector for specific spinner
-   */
   public startSpinner(selector: string) {
     this.spinner.show(selector, {
-      type: 'ball-clip-rotate-multiple',
+      type: "ball-clip-rotate-multiple",
       fullScreen: false,
-      bdColor: "rgba(0,0,0,0.5)"
-    });
+      bdColor: "rgba(0, 0, 0, 0.8)",
+      size: "medium",
+      color: "#fff"
+    })
   }
 
-  /**
-   * Stop NGX-Spinner
-   * @param selector selector for specific spinner
-   */
+  public startSpinnerTransparentBackground(selector: string) {
+    this.spinner.show(selector, {
+      type: "ball-clip-rotate-multiple",
+      fullScreen: false,
+      bdColor: "rgba(0, 0, 0, 0)",
+      size: "medium",
+      color: "var(--ion-color-primary)"
+    })
+  }
+
   public stopSpinner(selector: string) {
-    this.spinner.hide(selector);
+    this.spinner.hide(selector)
   }
 
   public async toast(message: string, level: 'success' | 'warning' | 'danger') {
@@ -374,13 +382,6 @@ export class Service implements ErrorHandler {
       cssClass: 'container'
     });
     toast.present();
-  }
-
-  /**
-   * Checks if this Edge is allowed to show kWh values
-   */
-  public isKwhAllowed(edge: Edge): boolean {
-    return false;
   }
 
   /**

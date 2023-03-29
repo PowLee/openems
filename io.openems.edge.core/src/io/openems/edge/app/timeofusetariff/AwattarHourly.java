@@ -1,7 +1,6 @@
 package io.openems.edge.app.timeofusetariff;
 
 import java.util.EnumMap;
-import java.util.List;
 
 import org.osgi.service.cm.ConfigurationAdmin;
 import org.osgi.service.component.ComponentContext;
@@ -12,18 +11,19 @@ import com.google.common.collect.Lists;
 import com.google.gson.JsonElement;
 
 import io.openems.common.exceptions.OpenemsError.OpenemsNamedException;
-import io.openems.common.function.ThrowingBiFunction;
+import io.openems.common.function.ThrowingTriFunction;
+import io.openems.common.session.Language;
 import io.openems.common.types.EdgeConfig;
-import io.openems.common.types.EdgeConfig.Component;
 import io.openems.common.utils.JsonUtils;
 import io.openems.edge.app.timeofusetariff.AwattarHourly.Property;
 import io.openems.edge.common.component.ComponentManager;
-import io.openems.edge.core.appmanager.AbstractOpenemsApp;
+import io.openems.edge.core.appmanager.AbstractEnumOpenemsApp;
 import io.openems.edge.core.appmanager.AppAssistant;
 import io.openems.edge.core.appmanager.AppConfiguration;
 import io.openems.edge.core.appmanager.AppDescriptor;
 import io.openems.edge.core.appmanager.ComponentUtil;
 import io.openems.edge.core.appmanager.ConfigurationTarget;
+import io.openems.edge.core.appmanager.Nameable;
 import io.openems.edge.core.appmanager.OpenemsApp;
 import io.openems.edge.core.appmanager.OpenemsAppCardinality;
 import io.openems.edge.core.appmanager.OpenemsAppCategory;
@@ -42,16 +42,20 @@ import io.openems.edge.core.appmanager.OpenemsAppCategory;
     	"TIME_OF_USE_TARIF_ID": "timeOfUseTariff0"
     },
     "appDescriptor": {
+    	"websiteUrl": {@link AppDescriptor#getWebsiteUrl()}
     }
   }
  * </pre>
  */
 @org.osgi.service.component.annotations.Component(name = "App.TimeOfUseTariff.Awattar")
-public class AwattarHourly extends AbstractOpenemsApp<Property> implements OpenemsApp {
+public class AwattarHourly extends AbstractEnumOpenemsApp<Property> implements OpenemsApp {
 
-	public static enum Property {
+	public static enum Property implements Nameable {
+		// Component-IDs
 		CTRL_ESS_TIME_OF_USE_TARIF_DISCHARGE_ID, //
 		TIME_OF_USE_TARIF_ID, //
+		// Properties
+		ALIAS, //
 		;
 	}
 
@@ -62,31 +66,33 @@ public class AwattarHourly extends AbstractOpenemsApp<Property> implements Opene
 	}
 
 	@Override
-	protected ThrowingBiFunction<ConfigurationTarget, EnumMap<Property, JsonElement>, AppConfiguration, OpenemsNamedException> appConfigurationFactory() {
-		return (t, p) -> {
+	protected ThrowingTriFunction<ConfigurationTarget, EnumMap<Property, JsonElement>, Language, AppConfiguration, OpenemsNamedException> appConfigurationFactory() {
+		return (t, p, l) -> {
 
-			var ctrlEssTimeOfUseTariffDischargeId = this.getId(t, p, Property.CTRL_ESS_TIME_OF_USE_TARIF_DISCHARGE_ID,
-					"ctrlEssTimeOfUseTariffDischarge0");
+			final var alias = this.getValueOrDefault(p, Property.ALIAS, this.getName(l));
 
-			var timeOfUseTariffId = this.getId(t, p, Property.TIME_OF_USE_TARIF_ID, "timeOfUseTariff0");
+			final var ctrlEssTimeOfUseTariffDischargeId = this.getId(t, p,
+					Property.CTRL_ESS_TIME_OF_USE_TARIF_DISCHARGE_ID, "ctrlEssTimeOfUseTariffDischarge0");
+			final var timeOfUseTariffId = this.getId(t, p, Property.TIME_OF_USE_TARIF_ID, "timeOfUseTariff0");
 
 			// TODO ess id may be changed
-			List<Component> comp = Lists.newArrayList(//
-					new EdgeConfig.Component(ctrlEssTimeOfUseTariffDischargeId, "aWATTar",
+			var components = Lists.newArrayList(//
+					new EdgeConfig.Component(ctrlEssTimeOfUseTariffDischargeId, alias,
 							"Controller.Ess.Time-Of-Use-Tariff.Discharge", JsonUtils.buildJsonObject() //
 									.addProperty("ess.id", "ess0") //
 									.build()), //
-					new EdgeConfig.Component(timeOfUseTariffId, "timeOfUseTariff0", "TimeOfUseTariff.Awattar",
+					new EdgeConfig.Component(timeOfUseTariffId, this.getName(l), "TimeOfUseTariff.Awattar",
 							JsonUtils.buildJsonObject() //
 									.build())//
 			);
-			return new AppConfiguration(comp, Lists.newArrayList("ctrlEssTimeOfUseTariffDischarge0", "ctrlBalancing0"));
+			return new AppConfiguration(components,
+					Lists.newArrayList(ctrlEssTimeOfUseTariffDischargeId, "ctrlBalancing0"));
 		};
 	}
 
 	@Override
-	public AppAssistant getAppAssistant() {
-		return AppAssistant.create(this.getName()) //
+	public AppAssistant getAppAssistant(Language language) {
+		return AppAssistant.create(this.getName(language)) //
 				.build();
 	}
 
@@ -97,18 +103,8 @@ public class AwattarHourly extends AbstractOpenemsApp<Property> implements Opene
 	}
 
 	@Override
-	public OpenemsAppCategory[] getCategorys() {
+	public OpenemsAppCategory[] getCategories() {
 		return new OpenemsAppCategory[] { OpenemsAppCategory.TIME_OF_USE_TARIFF };
-	}
-
-	@Override
-	public String getImage() {
-		return OpenemsApp.FALLBACK_IMAGE;
-	}
-
-	@Override
-	public String getName() {
-		return "Awattar HOURLY";
 	}
 
 	@Override

@@ -1,18 +1,22 @@
-import { Component } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { ApplicationRef, Component, Injectable, OnDestroy, OnInit } from '@angular/core';
 import { Title } from '@angular/platform-browser';
 import { Router } from '@angular/router';
+import { SwUpdate } from '@angular/service-worker';
 import { MenuController, ModalController, Platform, ToastController } from '@ionic/angular';
-import { Subject } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
+import { concat, interval, Subject, timer } from 'rxjs';
+import { first, retry, switchMap, takeUntil } from 'rxjs/operators';
+
 import { environment } from '../environments';
+import { CheckForUpdateService } from './appupdateservice';
 import { Service, Websocket } from './shared/shared';
-import { LanguageTag } from './shared/translate/language';
+import { Language } from './shared/type/language';
 
 @Component({
   selector: 'app-root',
   templateUrl: 'app.component.html'
 })
-export class AppComponent {
+export class AppComponent implements OnInit, OnDestroy {
 
   public environment = environment;
   public backUrl: string | boolean = '/';
@@ -28,9 +32,11 @@ export class AppComponent {
     public service: Service,
     public toastController: ToastController,
     public websocket: Websocket,
-    private titleService: Title
+    private titleService: Title,
+    checkForUpdateService: CheckForUpdateService
   ) {
-    service.setLang(LanguageTag[localStorage.LANGUAGE] ?? this.service.browserLangToLangTag(navigator.language));
+    service.setLang(Language.getByKey(localStorage.LANGUAGE) ?? Language.getByBrowserLang(navigator.language));
+    checkForUpdateService.init();
   }
 
   ngOnInit() {

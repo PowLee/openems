@@ -1,16 +1,25 @@
 package io.openems.edge.core.appmanager.jsonrpc;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 
 import com.google.gson.JsonObject;
+import com.google.gson.JsonPrimitive;
 
 import io.openems.common.exceptions.OpenemsError.OpenemsNamedException;
+import io.openems.common.exceptions.OpenemsException;
 import io.openems.common.jsonrpc.base.JsonrpcRequest;
 import io.openems.common.jsonrpc.base.JsonrpcResponseSuccess;
+import io.openems.common.session.Language;
 import io.openems.common.utils.JsonUtils;
 import io.openems.edge.core.appmanager.OpenemsApp;
 import io.openems.edge.core.appmanager.OpenemsAppInstance;
+import io.openems.edge.core.appmanager.validator.OpenemsAppStatus;
+import io.openems.edge.core.appmanager.validator.Validator;
 
 /**
  * Gets the available {@link OpenemsApp}.
@@ -95,32 +104,12 @@ public class GetApp {
 
 	public static class Response extends JsonrpcResponseSuccess {
 
-		private static JsonObject createAppObject(OpenemsApp app, List<OpenemsAppInstance> instantiatedApps) {
-
-			var instanceIds = JsonUtils.buildJsonArray();
-			for (var instantiatedApp : instantiatedApps) {
-				instanceIds.add(instantiatedApp.instanceId.toString());
-			}
-			var categorys = JsonUtils.buildJsonArray().build();
-			for (var cat : app.getCategorys()) {
-				categorys.add(cat.toJsonObject());
-			}
-			return JsonUtils.buildJsonObject() //
-					.add("categorys", categorys) //
-					.addProperty("cardinality", app.getCardinality().name()) //
-					.addProperty("appId", app.getAppId()) //
-					.addProperty("name", app.getName()) //
-					.addProperty("image", app.getImage()) //
-					.add("status", app.getValidator().toJsonObject()) //
-					.add("instanceIds", instanceIds.build()) //
-					.build();
-		}
-
 		private final JsonObject app;
 
-		public Response(UUID id, OpenemsApp app, List<OpenemsAppInstance> instantiatedApps) {
+		public Response(UUID id, OpenemsApp app, List<OpenemsAppInstance> instantiatedApps, Language language,
+				Validator validator) throws OpenemsNamedException {
 			super(id);
-			this.app = createAppObject(app, instantiatedApps);
+			this.app = createJsonObjectOf(app, validator, instantiatedApps, language);
 		}
 
 		@Override
@@ -128,6 +117,55 @@ public class GetApp {
 			return JsonUtils.buildJsonObject() //
 					.add("app", this.app) //
 					.build();
+		}
+	}
+
+	/**
+	 * Creates a {@link JsonObject} of the given {@link OpenemsApp}.
+	 * 
+	 * <p>
+	 * Also adds the status of the app and the instances of the app.
+	 * 
+	 * @param app              the {@link OpenemsApp}
+	 * @param validator        a {@link Validator} to get the status of the app
+	 *                         {@link OpenemsAppStatus}
+	 * @param instantiatedApps all instances
+	 * @param language         the {@link Language}
+	 * @return the created {@link JsonObject}
+	 * @throws OpenemsNamedException on error
+	 */
+	public static final JsonObject createJsonObjectOf(//
+			final OpenemsApp app, //
+			final Validator validator, //
+			final List<OpenemsAppInstance> instantiatedApps, //
+			final Language language //
+	) throws OpenemsNamedException {
+
+		final var imageFuture = CompletableFuture.supplyAsync(app::getImage);
+		final var statusFuture = CompletableFuture
+				.supplyAsync(() -> validator.toJsonObject(app.getValidatorConfig(), language));
+		try {
+			final var image = imageFuture.get();
+			final var status = statusFuture.get();
+
+			return JsonUtils.buildJsonObject() //
+					.add("categorys", Arrays.stream(app.getCategories()) //
+							.map(cat -> cat.toJsonObject(language)) //
+							.collect(JsonUtils.toJsonArray())) //
+					.addProperty("cardinality", app.getCardinality().name()) //
+					.addProperty("appId", app.getAppId()) //
+					.addProperty("name", app.getName(language)) //
+					.addPropertyIfNotNull("image", image) //
+					.add("status", status) //
+					.add("instanceIds", instantiatedApps.stream() //
+							.filter(instance -> app.getAppId().equals(instance.appId)) //
+							.map(instance -> new JsonPrimitive(instance.instanceId.toString())) //
+							.collect(JsonUtils.toJsonArray())) //
+					.build();
+		} catch (InterruptedException | CancellationException e) {
+			throw new OpenemsException(e);
+		} catch (ExecutionException e) {
+			throw new OpenemsException(e.getCause());
 		}
 	}
 

@@ -10,6 +10,8 @@ import java.util.Hashtable;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map.Entry;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -17,7 +19,6 @@ import org.osgi.service.cm.ConfigurationAdmin;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Reference;
 
-import com.google.common.base.Objects;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -35,7 +36,6 @@ import io.openems.edge.common.host.Host;
 import io.openems.edge.common.jsonapi.JsonApi;
 import io.openems.edge.common.user.User;
 import io.openems.edge.core.host.NetworkInterface;
-import io.openems.edge.core.host.NetworkInterface.Inet4AddressWithNetmask;
 import io.openems.edge.core.host.jsonrpc.SetNetworkConfigRequest;
 import io.openems.edge.io.api.DigitalOutput;
 
@@ -72,7 +72,7 @@ public class ComponentUtilImpl implements ComponentUtil {
 	 * @return true if they match
 	 */
 	public static boolean equals(JsonElement expected, JsonElement actual) {
-		if (Objects.equal(expected, actual)) {
+		if (Objects.equals(expected, actual)) {
 			return true;
 		}
 
@@ -182,7 +182,7 @@ public class ComponentUtilImpl implements ComponentUtil {
 		}
 
 		// Validate the Component Factory (i.e. is the Component of the correct type)
-		if (!Objects.equal(expectedComponent.getFactoryId(), actualComponent.getFactoryId())) {
+		if (!Objects.equals(expectedComponent.getFactoryId(), actualComponent.getFactoryId())) {
 			componentErrors.add("Factory-ID: " //
 					+ "expected '" + expectedComponent.getFactoryId() + "', " //
 					+ "got '" + actualComponent.getFactoryId() + "'");
@@ -241,7 +241,7 @@ public class ComponentUtilImpl implements ComponentUtil {
 		}
 
 		// Validate the Component Factory (i.e. is the Component of the correct type)
-		if (!Objects.equal(expectedComponent.getFactoryId(), actualComponent.getFactoryId())) {
+		if (!Objects.equals(expectedComponent.getFactoryId(), actualComponent.getFactoryId())) {
 			return false;
 		}
 
@@ -314,6 +314,9 @@ public class ComponentUtilImpl implements ComponentUtil {
 	 */
 	public static List<Component> order(List<Component> components) {
 		var copy = new ArrayList<>(components);
+		if (components.size() <= 1) {
+			return copy;
+		}
 		for (Component component : components) {
 			// determine which id s the component needs
 			List<String> ids = new ArrayList<>();
@@ -377,6 +380,21 @@ public class ComponentUtilImpl implements ComponentUtil {
 	}
 
 	@Override
+	public List<Relay> getAllRelays() {
+		List<DigitalOutput> allDigitalOutputs = this.getEnabledComponentsOfType(DigitalOutput.class);
+		List<Relay> relays = new LinkedList<>();
+		for (DigitalOutput digitalOutput : allDigitalOutputs) {
+			List<String> availableIos = new LinkedList<>();
+			for (var i = 0; i < digitalOutput.digitalOutputChannels().length; i++) {
+				var ioName = digitalOutput.id() + "/Relay" + (i + 1);
+				availableIos.add(ioName);
+			}
+			relays.add(new Relay(digitalOutput.id(), availableIos, digitalOutput.digitalOutputChannels().length));
+		}
+		return relays;
+	}
+
+	@Override
 	public List<Relay> getAvailableRelays() {
 		return this.getAvailableRelays(new ArrayList<>());
 	}
@@ -406,13 +424,12 @@ public class ComponentUtilImpl implements ComponentUtil {
 	@Override
 	public List<String> getAvailableRelays(String ioId, List<String> ignoreIds) throws OpenemsNamedException {
 		var digitalOutput = this.componentManager.getComponent(ioId);
-		if (digitalOutput instanceof DigitalOutput) {
-			return new ArrayList<>();
+		if (!(digitalOutput instanceof DigitalOutput)) {
+			return Collections.emptyList();
 		}
 		List<String> availableIos = new LinkedList<>();
-		var component = digitalOutput;
 		for (var i = 0; i < ((DigitalOutput) digitalOutput).digitalOutputChannels().length; i++) {
-			var ioName = component.id() + "/Relay" + (i + 1);
+			var ioName = digitalOutput.id() + "/Relay" + (i + 1);
 			if (!this.anyComponentUses(ioName, ignoreIds)) {
 				availableIos.add(ioName);
 			}
@@ -424,8 +441,7 @@ public class ComponentUtilImpl implements ComponentUtil {
 	@Override
 	public Component getComponentByConfig(Component component) {
 		for (var comp : this.componentManager.getEdgeConfig().getComponentsByFactory(component.getFactoryId())) {
-			var errors = new ArrayList<String>();
-			if (ComponentUtilImpl.isSameConfigurationWithoutIdAndAlias(errors, component, comp)) {
+			if (ComponentUtilImpl.isSameConfigurationWithoutIdAndAlias(null, component, comp)) {
 				return comp;
 			}
 		}
@@ -457,16 +473,13 @@ public class ComponentUtilImpl implements ComponentUtil {
 	}
 
 	@Override
-	public String getNextAvailableId(String baseName, List<Component> components) {
-		for (var i = 0; true; i++) {
+	public String getNextAvailableId(String baseName, int startingNumber, List<String> componentIds) {
+		for (var i = startingNumber; true; i++) {
 			var id = baseName + i;
-			try {
-				this.componentManager.getComponent(id);
+			if (this.componentManager.getEdgeConfig().getComponent(id).isPresent()) {
 				continue;
-			} catch (OpenemsNamedException e) {
-				// component with id not found
 			}
-			if (components.stream().anyMatch(t -> t.getId().equals(id))) {
+			if (componentIds.stream().anyMatch(t -> t.equals(id))) {
 				continue;
 			}
 			return id;
@@ -581,9 +594,9 @@ public class ComponentUtilImpl implements ComponentUtil {
 	}
 
 	private void setSchedulerComponentIds(User user, List<String> componentIds) throws OpenemsNamedException {
-
 		try {
 			var scheduler = this.getScheduler();
+			// null is necessary otherwise a new configuration gets created
 			var config = this.cm.getConfiguration(scheduler.getPid(), null);
 
 			var properties = config.getProperties();
@@ -697,57 +710,47 @@ public class ComponentUtilImpl implements ComponentUtil {
 	}
 
 	@Override
-	public void updateHosts(User user, List<String> ips, List<String> oldIps) throws OpenemsNamedException {
+	public void updateHosts(//
+			final User user, //
+			final List<InterfaceConfiguration> ips, //
+			final List<InterfaceConfiguration> oldIps //
+	) throws OpenemsNamedException {
 		if ((ips == null || ips.isEmpty()) && (oldIps == null || oldIps.isEmpty())) {
 			return;
 		}
-		if (ips == null) {
-			ips = new ArrayList<>();
-		}
-		var errors = new ArrayList<String>();
-		List<String> deleteIps;
-		if (oldIps == null) {
-			deleteIps = new ArrayList<>();
-		} else {
-			deleteIps = new ArrayList<>(oldIps);
-			deleteIps.removeAll(ips);
-		}
 
-		// parse ip s
-		List<Inet4AddressWithNetmask> deleteIpAddresses = new ArrayList<>();
-		for (var ip : deleteIps) {
-			try {
-				deleteIpAddresses.add(Inet4AddressWithNetmask.fromString(ip));
-			} catch (OpenemsException e) {
-				errors.add("Ip '" + ip + "' can not be parsed.");
-			}
-		}
-
-		List<Inet4AddressWithNetmask> ipAddresses = new ArrayList<>(ips.size());
-		for (var ip : ips) {
-			try {
-				ipAddresses.add(Inet4AddressWithNetmask.fromString(ip));
-			} catch (OpenemsException e) {
-				errors.add("Ip '" + ip + "' can not be parsed.");
-			}
-		}
+		final var errors = new ArrayList<String>();
 
 		var interfaces = this.getInterfaces();
-		var eth0 = interfaces.stream().filter(t -> t.getName().equals("eth0")).findFirst().get();
-		if (eth0 == null) {
-			return;
-		}
+		interfaces.stream() //
+				.forEach(networkInterface -> {
+					if (oldIps != null) {
+						// remove ip's in the old configuration
+						oldIps.stream() //
+								.filter(t -> t.interfaceName.equals(networkInterface.getName())) //
+								.forEach(t -> {
+									networkInterface.getAddresses().getValue().removeAll(t.getIps());
+								});
+					}
+					if (ips != null) {
+						// add new ip's
+						ips.stream() //
+								.filter(t -> t.interfaceName.equals(networkInterface.getName())) //
+								.forEach(t -> {
+									networkInterface.getAddresses().getValue().addAll(t.getIps());
+								});
+					}
+				});
 
-		// remove already added addresses
-		for (var address : eth0.getAddresses().getValue()) {
-			ipAddresses.remove(address);
-		}
+		ips.stream() //
+				.filter(ic -> !interfaces.stream().anyMatch(i -> i.getName().equals(ic.interfaceName)))
+				.map(ic -> "Can not add Ip-Addresses for interface '" + ic.interfaceName + "'") //
+				.forEach(errors::add);
 
-		// remove ip s from old configuration
-		eth0.getAddresses().getValue().removeAll(deleteIpAddresses);
-
-		// add ip s from new configuration
-		eth0.getAddresses().getValue().addAll(ipAddresses);
+		oldIps.stream() //
+				.filter(ic -> !interfaces.stream().anyMatch(i -> i.getName().equals(ic.interfaceName)))
+				.map(ic -> "Can not remove Ip-Addresses for interface '" + ic.interfaceName + "'") //
+				.forEach(errors::add);
 
 		try {
 			this.updateInterfaces(user, interfaces);
@@ -758,6 +761,15 @@ public class ComponentUtilImpl implements ComponentUtil {
 		if (!errors.isEmpty()) {
 			throw new OpenemsException(errors.stream().collect(Collectors.joining("|")));
 		}
+	}
+
+	@Override
+	public Optional<EdgeConfig.Component> getComponent(String id, String factoryId) {
+		var comp = this.componentManager.getEdgeConfig().getComponent(id);
+		if (comp.isEmpty() || !comp.get().getFactoryId().equals(factoryId)) {
+			return Optional.empty();
+		}
+		return comp;
 	}
 
 }

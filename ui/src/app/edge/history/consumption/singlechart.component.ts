@@ -1,5 +1,5 @@
 import { formatNumber } from '@angular/common';
-import { Component, Input, OnChanges, OnInit } from '@angular/core';
+import { Component, Input, OnChanges, OnDestroy, OnInit } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { TranslateService } from '@ngx-translate/core';
 import { QueryHistoricTimeseriesDataResponse } from 'src/app/shared/jsonrpc/response/queryHistoricTimeseriesDataResponse';
@@ -12,7 +12,7 @@ import { Data, TooltipItem } from '../shared';
     selector: 'consumptionSingleChart',
     templateUrl: '../abstracthistorychart.html'
 })
-export class ConsumptionSingleChartComponent extends AbstractHistoryChart implements OnInit, OnChanges {
+export class ConsumptionSingleChartComponent extends AbstractHistoryChart implements OnInit, OnChanges, OnDestroy {
 
     @Input() public period: DefaultTypes.HistoryPeriod;
     @Input() public showPhases: boolean;
@@ -27,13 +27,11 @@ export class ConsumptionSingleChartComponent extends AbstractHistoryChart implem
         protected translate: TranslateService,
         private route: ActivatedRoute,
     ) {
-        super(service, translate);
+        super("consumption-single-chart", service, translate);
     }
 
-
     ngOnInit() {
-        this.spinnerId = "consumption-single-chart";
-        this.service.startSpinner(this.spinnerId);
+        this.startSpinner();
         this.service.setCurrentComponent('', this.route);
     }
 
@@ -43,7 +41,7 @@ export class ConsumptionSingleChartComponent extends AbstractHistoryChart implem
 
     protected updateChart() {
         this.autoSubscribeChartRefresh();
-        this.service.startSpinner(this.spinnerId);
+        this.startSpinner();
         this.loading = true;
         this.queryHistoricTimeseriesData(this.period.from, this.period.to).then(response => {
             this.service.getCurrentEdge().then(edge => {
@@ -160,17 +158,20 @@ export class ConsumptionSingleChartComponent extends AbstractHistoryChart implem
                     });
                     this.datasets = datasets;
                     this.loading = false;
-                    this.service.stopSpinner(this.spinnerId);
+                    this.stopSpinner();
+
                 }).catch(reason => {
                     console.error(reason); // TODO error message
                     this.initializeChart();
                     return;
                 });
+
             }).catch(reason => {
                 console.error(reason); // TODO error message
                 this.initializeChart();
                 return;
             });
+
         }).catch(reason => {
             console.error(reason); // TODO error message
             this.initializeChart();

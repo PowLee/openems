@@ -8,21 +8,22 @@ import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Reference;
 
 import com.google.gson.JsonElement;
+import com.google.gson.JsonPrimitive;
 
 import io.openems.common.exceptions.OpenemsError.OpenemsNamedException;
-import io.openems.common.function.ThrowingBiFunction;
+import io.openems.common.function.ThrowingTriFunction;
+import io.openems.common.session.Language;
 import io.openems.common.utils.EnumUtils;
 import io.openems.common.utils.JsonUtils;
 import io.openems.edge.app.pvinverter.KostalPvInverter.Property;
 import io.openems.edge.common.component.ComponentManager;
+import io.openems.edge.core.appmanager.AbstractOpenemsApp;
 import io.openems.edge.core.appmanager.AppAssistant;
 import io.openems.edge.core.appmanager.AppConfiguration;
 import io.openems.edge.core.appmanager.AppDescriptor;
 import io.openems.edge.core.appmanager.ComponentUtil;
 import io.openems.edge.core.appmanager.ConfigurationTarget;
-import io.openems.edge.core.appmanager.JsonFormlyUtil;
-import io.openems.edge.core.appmanager.JsonFormlyUtil.InputBuilder.Type;
-import io.openems.edge.core.appmanager.JsonFormlyUtil.InputBuilder.Validation;
+import io.openems.edge.core.appmanager.Nameable;
 import io.openems.edge.core.appmanager.OpenemsApp;
 import io.openems.edge.core.appmanager.OpenemsAppCardinality;
 
@@ -39,12 +40,11 @@ import io.openems.edge.core.appmanager.OpenemsAppCardinality;
     	"PV_INVERTER_ID": "pvInverter0",
     	"MODBUS_ID": "modbus0",
     	"IP": "192.168.178.85",
-    	"PORT": "502",
+    	"PORT": "1502",
     	"MODBUS_UNIT_ID": "71"
     },
     "appDescriptor": {
-    	"websiteUrl": <a href=
-"https://fenecon.de/fems-2-2/fems-app-kostal-pv-wechselrichter/">https://fenecon.de/fems-2-2/fems-app-kostal-pv-wechselrichter/</a>
+    	"websiteUrl": {@link AppDescriptor#getWebsiteUrl()}
     }
   }
  * </pre>
@@ -52,15 +52,16 @@ import io.openems.edge.core.appmanager.OpenemsAppCardinality;
 @org.osgi.service.component.annotations.Component(name = "App.PvInverter.Kostal")
 public class KostalPvInverter extends AbstractPvInverter<Property> implements OpenemsApp {
 
-	public static enum Property {
-		// Components
+	public static enum Property implements Nameable {
+		// Component-IDs
 		PV_INVERTER_ID, //
 		MODBUS_ID, //
-		// User-Values
+		// Properties
 		ALIAS, //
-		IP, // the ip for the modbus
+		IP, //
 		PORT, //
-		MODBUS_UNIT_ID;
+		MODBUS_UNIT_ID //
+		;
 
 	}
 
@@ -71,10 +72,10 @@ public class KostalPvInverter extends AbstractPvInverter<Property> implements Op
 	}
 
 	@Override
-	protected ThrowingBiFunction<ConfigurationTarget, EnumMap<Property, JsonElement>, AppConfiguration, OpenemsNamedException> appConfigurationFactory() {
-		return (t, p) -> {
+	protected ThrowingTriFunction<ConfigurationTarget, EnumMap<Property, JsonElement>, Language, AppConfiguration, OpenemsNamedException> appConfigurationFactory() {
+		return (t, p, l) -> {
 
-			var alias = this.getValueOrDefault(p, Property.ALIAS, this.getName());
+			var alias = this.getValueOrDefault(p, Property.ALIAS, this.getName(l));
 			var ip = this.getValueOrDefault(p, Property.IP, "192.168.178.85");
 			var port = EnumUtils.getAsInt(p, Property.PORT);
 			var modbusUnitId = EnumUtils.getAsInt(p, Property.MODBUS_UNIT_ID);
@@ -84,39 +85,24 @@ public class KostalPvInverter extends AbstractPvInverter<Property> implements Op
 
 			var factoryIdInverter = "PV-Inverter.Kostal";
 			var components = this.getComponents(factoryIdInverter, pvInverterId, modbusId, alias, ip, port);
-			var inverter = this.getComponentWithFactoryId(components, factoryIdInverter);
-			inverter.getProperties().put("modbusUnitId", JsonUtils.parse(Integer.toString(modbusUnitId)));
+			var inverter = AbstractOpenemsApp.getComponentWithFactoryId(components, factoryIdInverter);
+			inverter.getProperties().put("modbusUnitId", new JsonPrimitive(modbusUnitId));
 
 			return new AppConfiguration(components);
 		};
 	}
 
 	@Override
-	public AppAssistant getAppAssistant() {
-		return AppAssistant.create(this.getName()) //
+	public AppAssistant getAppAssistant(Language language) {
+		return AppAssistant.create(this.getName(language)) //
 				.fields(JsonUtils.buildJsonArray() //
-						.add(JsonFormlyUtil.buildInput(Property.IP) //
-								.setLabel("IP-Address") //
-								.setDescription("The IP address of the Pv-Inverter.") //
-								.setDefaultValue("192.168.178.85") //
-								.isRequired(true) //
-								.setValidation(Validation.IP) //
+						.add(AbstractPvInverter.buildIp(language, Property.IP) //
 								.build()) //
-						.add(JsonFormlyUtil.buildInput(Property.PORT) //
-								.setLabel("Port") //
-								.setDescription("The port of the Pv-Inverter.") //
-								.setInputType(Type.NUMBER) //
-								.setDefaultValue(502) //
-								.setMin(0) //
-								.isRequired(true) //
+						.add(AbstractPvInverter.buildPort(language, Property.PORT) //
+								.setDefaultValue(1502) //
 								.build()) //
-						.add(JsonFormlyUtil.buildInput(Property.MODBUS_UNIT_ID) //
-								.setLabel("Modbus Unit-ID") //
-								.setDescription("The Unit-ID of the Modbus device.") //
-								.setInputType(Type.NUMBER) //
+						.add(AbstractPvInverter.buildModbusUnitId(language, Property.MODBUS_UNIT_ID) //
 								.setDefaultValue(71) //
-								.setMin(0) //
-								.isRequired(true) //
 								.build()) //
 						.build())
 				.build();
@@ -126,16 +112,6 @@ public class KostalPvInverter extends AbstractPvInverter<Property> implements Op
 	public AppDescriptor getAppDescriptor() {
 		return AppDescriptor.create() //
 				.build();
-	}
-
-	@Override
-	public String getImage() {
-		return OpenemsApp.FALLBACK_IMAGE;
-	}
-
-	@Override
-	public String getName() {
-		return "Kostal PV-Wechselrichter";
 	}
 
 	@Override

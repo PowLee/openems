@@ -1,5 +1,8 @@
 package io.openems.common.utils;
 
+import java.util.function.Predicate;
+import java.util.regex.Pattern;
+
 import com.google.gson.JsonElement;
 
 /**
@@ -85,4 +88,54 @@ public class StringUtils {
 			return -1;
 		}
 	}
+
+	private static final Predicate<String> DETECT_INTEGER_PATTERN = //
+			Pattern.compile("^[-+]?[0-9]+$").asPredicate();
+	private static final Predicate<String> DETECT_FLOAT_PATTERN = //
+			Pattern.compile("^[-+]?[0-9]*\\.[0-9]+$").asPredicate();
+
+	/**
+	 * Checks if the given string matches an Integer pattern, i.e. if could be
+	 * parsed to Integer/Long.
+	 * 
+	 * @param string a string
+	 * @return true if it matches Integer
+	 */
+	public static boolean matchesIntegerPattern(String string) {
+		return DETECT_INTEGER_PATTERN.test(string);
+	}
+
+	/**
+	 * Checks if the given string matches an Float pattern, i.e. if could be parsed
+	 * to Float/Double.
+	 * 
+	 * @param string a string
+	 * @return true if it matches Float
+	 */
+	public static boolean matchesFloatPattern(String string) {
+		return DETECT_FLOAT_PATTERN.test(string);
+	}
+
+	/**
+	 * Causes this character sequence to be replaced by the reverse of the sequence.
+	 * 
+	 * @param string to be reversed.
+	 * @return reversed String.
+	 */
+	public static String reverse(String string) {
+		return new StringBuilder(string).reverse().toString();
+	}
+
+	/**
+	 * If the given string is null return false, otherwise result of
+	 * {@link String#contains(CharSequence)} is returned.
+	 * 
+	 * @param string the string to check
+	 * @param value  the sequence to search for
+	 * @return true if string is not null and string contains value, otherwise false
+	 */
+	public static boolean containsWithNullCheck(String string, String value) {
+		return string != null && string.contains(value);
+	}
+
 }

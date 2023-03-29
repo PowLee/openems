@@ -14,6 +14,21 @@ import io.openems.edge.common.channel.value.Value;
 public class TypeUtilsTest {
 
 	@Test
+	public void testAverageInt() {
+		// int values input, avg - rounding previous value
+		assertEquals(Integer.valueOf(0), TypeUtils.averageInt(0, 0, 1));
+
+		// int values
+		assertEquals(Integer.valueOf(10), TypeUtils.averageInt(5, 10, 15));
+
+		// int values input, avg - rounding to next value
+		assertEquals(Integer.valueOf(11), TypeUtils.averageInt(10, 11));
+
+		// null values
+		assertEquals(null, TypeUtils.averageInt(null, null));
+	}
+
+	@Test
 	public void testAverage() {
 		// null values
 		assertEquals(null, TypeUtils.average(null, null, null));
@@ -95,10 +110,10 @@ public class TypeUtilsTest {
 		 * To SHORT
 		 */
 		{
-			var expected = Short.valueOf((short) 123);
 			assertEquals(null, this.getAsShort(null));
 			assertEquals(Short.valueOf((short) 1), this.getAsShort(Boolean.TRUE));
 			assertEquals(Short.valueOf((short) 0), this.getAsShort(Boolean.FALSE));
+			var expected = Short.valueOf((short) 123);
 			assertEquals(expected, this.getAsShort(expected));
 			this.assertException(() -> this.getAsShort(Integer.valueOf(Short.MAX_VALUE + 1)));
 			this.assertException(() -> this.getAsShort(Integer.valueOf(Short.MIN_VALUE - 1)));
@@ -122,10 +137,10 @@ public class TypeUtilsTest {
 		 * To INTEGER
 		 */
 		{
-			var expected = Integer.valueOf(123);
 			assertEquals(null, this.getAsInteger(null));
 			assertEquals(Integer.valueOf(0), this.getAsInteger(Boolean.FALSE));
 			assertEquals(Integer.valueOf(1), this.getAsInteger(Boolean.TRUE));
+			var expected = Integer.valueOf(123);
 			assertEquals(expected, this.getAsInteger(Short.valueOf((short) 123)));
 			assertEquals(expected, this.getAsInteger(123));
 			this.assertException(() -> this.getAsInteger(Long.valueOf(Long.valueOf(Integer.MAX_VALUE) + 1)));
@@ -147,10 +162,10 @@ public class TypeUtilsTest {
 		 * To LONG
 		 */
 		{
-			var expected = Long.valueOf(123);
 			assertEquals(null, this.getAsLong(null));
 			assertEquals(Long.valueOf(0), this.getAsLong(Boolean.FALSE));
 			assertEquals(Long.valueOf(1), this.getAsLong(Boolean.TRUE));
+			var expected = Long.valueOf(123);
 			assertEquals(expected, this.getAsLong(Short.valueOf((short) 123)));
 			assertEquals(expected, this.getAsLong(123));
 			assertEquals(expected, this.getAsLong(Long.valueOf(123)));
@@ -166,10 +181,10 @@ public class TypeUtilsTest {
 		 * To FLOAT
 		 */
 		{
-			var expected = Float.valueOf(123);
 			assertEquals(null, this.getAsFloat(null));
 			assertEquals(Float.valueOf(0), this.getAsFloat(Boolean.FALSE));
 			assertEquals(Float.valueOf(1), this.getAsFloat(Boolean.TRUE));
+			var expected = Float.valueOf(123);
 			assertEquals(expected, this.getAsFloat(Short.valueOf((short) 123)));
 			assertEquals(expected, this.getAsFloat(123));
 			assertEquals(expected, this.getAsFloat(Long.valueOf(123)));
@@ -186,10 +201,10 @@ public class TypeUtilsTest {
 		 * To DOUBLE
 		 */
 		{
-			var expected = Double.valueOf(123);
 			assertEquals(null, this.getAsDouble(null));
 			assertEquals(Double.valueOf(0), this.getAsDouble(Boolean.FALSE));
 			assertEquals(Double.valueOf(1), this.getAsDouble(Boolean.TRUE));
+			var expected = Double.valueOf(123);
 			assertEquals(expected, this.getAsDouble(Short.valueOf((short) 123)));
 			assertEquals(expected, this.getAsDouble(123));
 			assertEquals(expected, this.getAsDouble(Long.valueOf(123)));

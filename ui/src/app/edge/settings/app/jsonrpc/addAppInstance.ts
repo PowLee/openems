@@ -1,4 +1,5 @@
 import { JsonrpcRequest, JsonrpcResponseSuccess } from "../../../../shared/jsonrpc/base";
+import { GetAppInstances } from "./getAppInstances";
 
 /**
  * Adds an OpenemsAppInstance.
@@ -40,6 +41,7 @@ export namespace AddAppInstance {
 
         public constructor(
             public readonly params: {
+                key?: string, // only for newer versions
                 appId: string,
                 alias: string,
                 properties: {}
@@ -54,7 +56,9 @@ export namespace AddAppInstance {
         public constructor(
             public readonly id: string,
             public readonly result: {
-                instanceId: string
+                instanceId: string,
+                instance: GetAppInstances.AppInstance,
+                warnings: String[]
             }
         ) {
             super(id, result);

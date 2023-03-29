@@ -14,6 +14,7 @@ import org.osgi.service.component.annotations.ReferencePolicy;
 import org.osgi.service.component.annotations.ReferencePolicyOption;
 import org.osgi.service.metatype.annotations.Designate;
 
+import io.openems.common.channel.AccessMode;
 import io.openems.common.exceptions.OpenemsException;
 import io.openems.edge.bridge.modbus.api.AbstractOpenemsModbusComponent;
 import io.openems.edge.bridge.modbus.api.BridgeModbus;
@@ -25,6 +26,8 @@ import io.openems.edge.bridge.modbus.api.element.FloatDoublewordElement;
 import io.openems.edge.bridge.modbus.api.element.WordOrder;
 import io.openems.edge.bridge.modbus.api.task.FC4ReadInputRegistersTask;
 import io.openems.edge.common.component.OpenemsComponent;
+import io.openems.edge.common.modbusslave.ModbusSlave;
+import io.openems.edge.common.modbusslave.ModbusSlaveTable;
 import io.openems.edge.common.taskmanager.Priority;
 import io.openems.edge.meter.api.AsymmetricMeter;
 import io.openems.edge.meter.api.MeterType;
@@ -36,8 +39,8 @@ import io.openems.edge.meter.api.SymmetricMeter;
 		immediate = true, //
 		configurationPolicy = ConfigurationPolicy.REQUIRE //
 )
-public class MeterMicrocareSdm630Impl extends AbstractOpenemsModbusComponent
-		implements MeterMicrocareSdm630, AsymmetricMeter, SymmetricMeter, ModbusComponent, OpenemsComponent {
+public class MeterMicrocareSdm630Impl extends AbstractOpenemsModbusComponent implements MeterMicrocareSdm630,
+		AsymmetricMeter, SymmetricMeter, ModbusComponent, OpenemsComponent, ModbusSlave {
 
 	private MeterType meterType = MeterType.PRODUCTION;
 
@@ -87,10 +90,9 @@ public class MeterMicrocareSdm630Impl extends AbstractOpenemsModbusComponent
 				new FC4ReadInputRegistersTask(30001 - offset, Priority.HIGH,
 						m(new FloatDoublewordElement(30001 - offset).wordOrder(WordOrder.MSWLSW)
 								.byteOrder(ByteOrder.BIG_ENDIAN))
-										.m(AsymmetricMeter.ChannelId.VOLTAGE_L1,
-												ElementToChannelConverter.SCALE_FACTOR_3)//
-										.m(SymmetricMeter.ChannelId.VOLTAGE, ElementToChannelConverter.SCALE_FACTOR_3)//
-										.build(),
+								.m(AsymmetricMeter.ChannelId.VOLTAGE_L1, ElementToChannelConverter.SCALE_FACTOR_3)//
+								.m(SymmetricMeter.ChannelId.VOLTAGE, ElementToChannelConverter.SCALE_FACTOR_3)//
+								.build(),
 						m(AsymmetricMeter.ChannelId.VOLTAGE_L2,
 								new FloatDoublewordElement(30003 - offset).wordOrder(WordOrder.MSWLSW)
 										.byteOrder(ByteOrder.BIG_ENDIAN),
@@ -156,22 +158,22 @@ public class MeterMicrocareSdm630Impl extends AbstractOpenemsModbusComponent
 								new FloatDoublewordElement(30071 - offset).wordOrder(WordOrder.MSWLSW)
 										.byteOrder(ByteOrder.BIG_ENDIAN),
 								ElementToChannelConverter.DIRECT_1_TO_1),
-						m(SymmetricMeter.ChannelId.ACTIVE_PRODUCTION_ENERGY,
+						m(SymmetricMeter.ChannelId.ACTIVE_CONSUMPTION_ENERGY,
 								new FloatDoublewordElement(30073 - offset).wordOrder(WordOrder.MSWLSW)
 										.byteOrder(ByteOrder.BIG_ENDIAN),
-								ElementToChannelConverter.DIRECT_1_TO_1),
-						m(SymmetricMeter.ChannelId.ACTIVE_CONSUMPTION_ENERGY,
+								ElementToChannelConverter.SCALE_FACTOR_3),
+						m(SymmetricMeter.ChannelId.ACTIVE_PRODUCTION_ENERGY,
 								new FloatDoublewordElement(30075 - offset).wordOrder(WordOrder.MSWLSW)
 										.byteOrder(ByteOrder.BIG_ENDIAN),
-								ElementToChannelConverter.DIRECT_1_TO_1),
-						m(MeterMicrocareSdm630.ChannelId.REACTIVE_PRODUCTION_ENERGY,
+								ElementToChannelConverter.SCALE_FACTOR_3),
+						m(MeterMicrocareSdm630.ChannelId.REACTIVE_CONSUMPTION_ENERGY,
 								new FloatDoublewordElement(30077 - offset).wordOrder(WordOrder.MSWLSW)
 										.byteOrder(ByteOrder.BIG_ENDIAN),
-								ElementToChannelConverter.DIRECT_1_TO_1),
-						m(MeterMicrocareSdm630.ChannelId.REACTIVE_CONSUMPTION_ENERGY,
+								ElementToChannelConverter.SCALE_FACTOR_3),
+						m(MeterMicrocareSdm630.ChannelId.REACTIVE_PRODUCTION_ENERGY,
 								new FloatDoublewordElement(30079 - offset).wordOrder(WordOrder.MSWLSW)
 										.byteOrder(ByteOrder.BIG_ENDIAN),
-								ElementToChannelConverter.DIRECT_1_TO_1)));
+								ElementToChannelConverter.SCALE_FACTOR_3)));
 	}
 
 	@Override
@@ -179,4 +181,12 @@ public class MeterMicrocareSdm630Impl extends AbstractOpenemsModbusComponent
 		return "L:" + this.getActivePower().asString();
 	}
 
+	@Override
+	public ModbusSlaveTable getModbusSlaveTable(AccessMode accessMode) {
+		return new ModbusSlaveTable(//
+				OpenemsComponent.getModbusSlaveNatureTable(accessMode), //
+				SymmetricMeter.getModbusSlaveNatureTable(accessMode), //
+				AsymmetricMeter.getModbusSlaveNatureTable(accessMode) //
+		);
+	}
 }

@@ -17,7 +17,8 @@
                 <ng-container *ngIf="isEmergencyReserveEnabled[component.id]">
                     <svg>
                         <rect y="2" rx="5" ry="5" width="1%"
-                            [attr.x]="reserve['currentReserveSoc'] + '%'" height="16" style="fill:black;" />
+                            [attr.x]="(reserve['currentReserveSoc'] > 98 ? 98 : reserve['currentReserveSoc'])  + '%'"
+                            height="16" style="fill:black;" />
                     </svg>
                 </ng-container>
             </oe-flat-widget-percentagebar>
@@ -47,6 +48,9 @@
                 [channelAddress]="component.id + '/DcDischargePower'" [converter]="convertDischargePower">
             </oe-flat-widget-line>
         </ng-template>
+
+        <oe-flat-widget-line *ngIf="isAtLeastInstaller && possibleBatteryExtensionMessage.get(component.id) as message"
+            [name]="message.text" leftColumnWidth="100" [style.color]="message.color"></oe-flat-widget-line>
 
         <oe-flat-widget-horizontal-line [components]="essComponents" [index]="i">
         </oe-flat-widget-horizontal-line>

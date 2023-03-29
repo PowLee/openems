@@ -2,14 +2,20 @@ package io.openems.edge.core.appmanager.validator;
 
 import java.util.Map;
 
+import org.osgi.service.component.ComponentContext;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.Reference;
+import org.osgi.service.component.annotations.ServiceScope;
 
+import io.openems.common.session.Language;
 import io.openems.edge.common.component.ComponentManager;
 
-@Component(name = CheckNoComponentInstalledOfFactoryId.COMPONENT_NAME)
-public class CheckNoComponentInstalledOfFactoryId implements Checkable {
+@Component(//
+		name = CheckNoComponentInstalledOfFactoryId.COMPONENT_NAME, //
+		scope = ServiceScope.PROTOTYPE //
+)
+public class CheckNoComponentInstalledOfFactoryId extends AbstractCheckable implements Checkable {
 
 	public static final String COMPONENT_NAME = "Validator.Checkable.CheckNoComponentInstalledOfFactorieId";
 
@@ -18,7 +24,9 @@ public class CheckNoComponentInstalledOfFactoryId implements Checkable {
 	private String factorieId;
 
 	@Activate
-	public CheckNoComponentInstalledOfFactoryId(@Reference ComponentManager componentManager) {
+	public CheckNoComponentInstalledOfFactoryId(@Reference ComponentManager componentManager,
+			ComponentContext componentContext) {
+		super(componentContext);
 		this.componentManager = componentManager;
 	}
 
@@ -33,9 +41,9 @@ public class CheckNoComponentInstalledOfFactoryId implements Checkable {
 	}
 
 	@Override
-	public String getErrorMessage() {
-		return "Components with the FactorieID[" + this.factorieId + "] are installed!" + System.lineSeparator()
-				+ "Remove them to be able to install this app.";
+	public String getErrorMessage(Language language) {
+		return AbstractCheckable.getTranslation(language,
+				"Validator.Checkable.CheckNoComponentInstalledOfFactorieId.Message", this.factorieId);
 	}
 
 }

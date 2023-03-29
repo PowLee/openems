@@ -4,10 +4,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map.Entry;
 import java.util.NavigableMap;
+import java.util.TreeMap;
 
 import io.openems.common.exceptions.OpenemsError;
 import io.openems.common.exceptions.OpenemsError.OpenemsNamedException;
-import io.openems.common.jsonrpc.response.AuthenticateResponse.EdgeMetadata;
+import io.openems.common.jsonrpc.response.GetEdgesResponse.EdgeMetadata;
 import io.openems.common.session.AbstractUser;
 import io.openems.common.session.Language;
 import io.openems.common.session.Role;
@@ -21,6 +22,10 @@ public class User extends AbstractUser {
 	 * Keeps the login token.
 	 */
 	private final String token;
+
+	public User(String id, String name, String token, Language language, Role globalRole) {
+		this(id, name, token, language, globalRole, new TreeMap<>());
+	}
 
 	public User(String id, String name, String token, Language language, Role globalRole,
 			NavigableMap<String, Role> roles) {
@@ -38,22 +43,6 @@ public class User extends AbstractUser {
 	}
 
 	/**
-	 * Gets the information whether the Users Role for the given Edge is equal or
-	 * more privileged than the given Role.
-	 *
-	 * @param edgeId the Edge-Id
-	 * @param role   the compared Role
-	 * @return true if the Users Role privileges are equal or higher
-	 */
-	public boolean roleIsAtLeast(String edgeId, Role role) {
-		var thisRoleOpt = this.getRole(edgeId);
-		if (!thisRoleOpt.isPresent()) {
-			return false;
-		}
-		return true;
-	}
-
-	/**
 	 * Throws an exception if the current Role is equal or more privileged than the
 	 * given Role.
 	 *
@@ -66,7 +55,7 @@ public class User extends AbstractUser {
 	public Role assertEdgeRoleIsAtLeast(String resource, String edgeId, Role role) throws OpenemsNamedException {
 		var thisRoleOpt = this.getRole(edgeId);
 		if (!thisRoleOpt.isPresent()) {
-			throw OpenemsError.COMMON_ROLE_UNDEFINED.exception(this.getId());
+			throw OpenemsError.COMMON_ROLE_UNDEFINED.exception(resource, this.getId());
 		}
 		var thisRole = thisRoleOpt.get();
 		if (!thisRole.isAtLeast(role)) {
@@ -96,10 +85,12 @@ public class User extends AbstractUser {
 						edge.getProducttype(), // Product-Type
 						edge.getVersion(), // Version
 						role, // Role
-						edge.isOnline() // Online-State
+						edge.isOnline(), // Online-State
+						edge.getLastmessage() // Last-Message Timestamp
 				));
 			}
 		}
 		return metadatas;
 	}
+
 }

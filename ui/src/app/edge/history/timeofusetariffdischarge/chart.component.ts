@@ -1,5 +1,5 @@
 import { formatNumber } from '@angular/common';
-import { Component, Input, OnChanges, OnInit } from '@angular/core';
+import { Component, Input, OnChanges, OnDestroy, OnInit } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { TranslateService } from '@ngx-translate/core';
 import { differenceInDays } from 'date-fns';
@@ -13,10 +13,11 @@ import { Data, TooltipItem, Unit } from '../shared';
   selector: 'timeOfUseTariffDischargeChart',
   templateUrl: '../abstracthistorychart.html'
 })
-export class TimeOfUseTariffDischargeChartComponent extends AbstractHistoryChart implements OnInit, OnChanges {
+export class TimeOfUseTariffDischargeChartComponent extends AbstractHistoryChart implements OnInit, OnChanges, OnDestroy {
 
   @Input() public period: DefaultTypes.HistoryPeriod;
   @Input() public componentId: string;
+  public component: EdgeConfig.Component = null;
 
   ngOnChanges() {
     this.updateChart();
@@ -27,13 +28,15 @@ export class TimeOfUseTariffDischargeChartComponent extends AbstractHistoryChart
     protected translate: TranslateService,
     private route: ActivatedRoute,
   ) {
-    super(service, translate);
+    super("timeOfUseTariffDischarge-chart", service, translate);
   }
 
   ngOnInit() {
-    this.spinnerId = "timeOfUseTariffDischarge-chart";
-    this.service.startSpinner(this.spinnerId);
+    this.startSpinner();
     this.service.setCurrentComponent('', this.route);
+    this.service.getConfig().then(config => {
+      this.component = config.getComponent(this.componentId);
+    })
   }
 
   ngOnDestroy() {
@@ -42,7 +45,7 @@ export class TimeOfUseTariffDischargeChartComponent extends AbstractHistoryChart
 
   protected updateChart() {
     this.autoSubscribeChartRefresh();
-    this.service.startSpinner(this.spinnerId);
+    this.startSpinner();
     this.colors = [];
     this.loading = true;
 
@@ -61,54 +64,48 @@ export class TimeOfUseTariffDischargeChartComponent extends AbstractHistoryChart
         // convert datasets
         let datasets = [];
         let quarterlyPrices = this.componentId + '/QuarterlyPrices';
-        let TimeOfUseTariffState = this.componentId + '/StateMachine';
+        let timeOfUseTariffState = this.componentId + '/StateMachine';
         // let predictedSocWithoutLogic = this.componentId + '/PredictedSocWithoutLogic';
 
-        if (TimeOfUseTariffState in result.data && quarterlyPrices in result.data) {
-
-          // Get only the 15 minute value
-          let quarterlyPricesStandbyModeData = [];
-          let quarterlyPricesNightData = [];
-          let quarterlyPricesDelayedDischargeData = [];
-          // let predictedSocWithoutLogicData = [];
+        if (timeOfUseTariffState in result.data && quarterlyPrices in result.data) {
 
           //Size of the data
-          let size = result.data[TimeOfUseTariffState].length;
+          let size = result.data[timeOfUseTariffState].length;
 
-          for (let i = 0; i < size; i++) {
-            let quarterlyPrice = this.formatPrice(result.data[quarterlyPrices][i]);
-            let state = result.data[TimeOfUseTariffState][i];
+          // Get only the 15 minute value
+          let quarterlyPricesStandbyModeData = Array(size).fill(null);
+          let quarterlyPricesNightData = Array(size).fill(null);
+          let quarterlyPricesDelayedDischargeData = Array(size).fill(null);
+          let quarterlyPricesChargedData = Array(size).fill(null);
+          // let predictedSocWithoutLogicData = Array(size).fill(null);
 
-            if (state == null) {
-              quarterlyPricesDelayedDischargeData.push(null);
-              quarterlyPricesNightData.push(null);
-              quarterlyPricesStandbyModeData.push(null);
-            } else {
+          for (let index = 0; index < size; index++) {
+            let quarterlyPrice = this.formatPrice(result.data[quarterlyPrices][index]);
+            let state = result.data[timeOfUseTariffState][index];
+
+            if (state !== null) {
               switch (state) {
                 case 0:
                   // delayed
-                  quarterlyPricesDelayedDischargeData.push(quarterlyPrice);
-                  quarterlyPricesNightData.push(null);
-                  quarterlyPricesStandbyModeData.push(null);
+                  quarterlyPricesDelayedDischargeData[index] = quarterlyPrice;
                   break;
                 case 1:
                   // allowsDischarge
-                  quarterlyPricesDelayedDischargeData.push(null);
-                  quarterlyPricesNightData.push(quarterlyPrice)
-                  quarterlyPricesStandbyModeData.push(null);
+                  quarterlyPricesNightData[index] = quarterlyPrice;
                   break;
                 case -1:
                 // notStarted
                 case 2:
                   // standby
-                  quarterlyPricesDelayedDischargeData.push(null);
-                  quarterlyPricesNightData.push(null);
-                  quarterlyPricesStandbyModeData.push(quarterlyPrice);
+                  quarterlyPricesStandbyModeData[index] = quarterlyPrice;
+                  break;
+                case 3:
+                  // charged
+                  quarterlyPricesChargedData[index] = quarterlyPrice;
                   break;
               }
             }
           }
-
 
           // Set dataset for no limit
           datasets.push({
@@ -149,6 +146,22 @@ export class TimeOfUseTariffDischargeChartComponent extends AbstractHistoryChart
             backgroundColor: 'rgba(0,0,200,0.7)',
             borderColor: 'rgba(0,0,200,0.9)',
           })
+
+          // Show charge data only for the new controller.
+          if (this.component.factoryId === 'Controller.Ess.Time-Of-Use-Tariff') {
+            // Set dataset for Quarterly Prices being charged.
+            datasets.push({
+              type: 'bar',
+              label: this.translate.instant('Edge.Index.Widgets.TimeOfUseTariff.State.CHARGING'),
+              data: quarterlyPricesChargedData,
+              order: 3,
+            });
+            this.colors.push({
+              // Sky blue
+              backgroundColor: 'rgba(0, 204, 204,0.5)',
+              borderColor: 'rgba(0, 204, 204,0.7)',
+            })
+          }
 
           // Predicted SoC is not shown for now, because it is not inteligent enough with the simple prediction
           // if (predictedSocWithoutLogic in result.data) {
@@ -204,12 +217,14 @@ export class TimeOfUseTariffDischargeChartComponent extends AbstractHistoryChart
 
         this.datasets = datasets;
         this.loading = false;
-        this.service.stopSpinner(this.spinnerId);
+        this.stopSpinner();
+
       }).catch(reason => {
         console.error(reason); // TODO error message
         this.initializeChart();
         return;
       });
+
     }).catch(reason => {
       console.error(reason); // TODO error message
       this.initializeChart();
@@ -218,13 +233,13 @@ export class TimeOfUseTariffDischargeChartComponent extends AbstractHistoryChart
   }
 
   /**
-   * Converts a value in €/MWh to €/kWh.
+   * Converts a value in €/MWh to €Ct./kWh.
    * 
    * @param price the price value
    * @returns  the converted price
    */
   private formatPrice(price: number): number {
-    if (price == null || price == NaN) {
+    if (price == null || Number.isNaN(price)) {
       return null;
     } else if (price == 0) {
       return 0;
@@ -236,20 +251,29 @@ export class TimeOfUseTariffDischargeChartComponent extends AbstractHistoryChart
 
   protected getChannelAddresses(edge: Edge, config: EdgeConfig): Promise<ChannelAddress[]> {
     return new Promise((resolve) => {
-      resolve(
-        [
-          new ChannelAddress(this.componentId, 'Delayed'),
-          new ChannelAddress(this.componentId, 'QuarterlyPrices'),
-          new ChannelAddress(this.componentId, 'StateMachine'),
-          new ChannelAddress('_sum', 'EssSoc'),
-          // new ChannelAddress(this.componentId, 'PredictedSocWithoutLogic'),
-        ]);
+      let channels: ChannelAddress[] = [
+        new ChannelAddress(this.componentId, 'Delayed'),
+        new ChannelAddress(this.componentId, 'QuarterlyPrices'),
+        new ChannelAddress(this.componentId, 'StateMachine'),
+        new ChannelAddress('_sum', 'EssSoc'),
+        // new ChannelAddress(this.componentId, 'PredictedSocWithoutLogic'),
+      ];
+
+      // Channel only in the new controller.
+      if (this.component.factoryId === 'Controller.Ess.Time-Of-Use-Tariff') {
+        channels.push(new ChannelAddress(this.componentId, 'Charged'))
+      }
+
+      resolve(channels);
     });
   }
 
   protected setLabel(config: EdgeConfig) {
     let options = this.createDefaultChartOptions();
     let translate = this.translate;
+
+    // Scale prices y-axis between min-/max-values, not from zero
+    options.scales.yAxes[0].ticks.beginAtZero = false;
 
     // Adds second y-axis to chart
     options.scales.yAxes.push({

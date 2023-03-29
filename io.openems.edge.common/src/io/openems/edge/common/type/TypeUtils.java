@@ -498,15 +498,17 @@ public class TypeUtils {
 	/**
 	 * Safely multiply Integers.
 	 *
-	 * @param factors the factors of the multiplication
-	 * @return the result, possibly null if all factors are null
+	 * @param firstFactor    first factor of the multiplication
+	 * @param furtherFactors further factors of the multiplication
+	 * @return the result, possibly null if the first factor is null
 	 */
-	public static Integer multiply(Integer... factors) {
-		Integer result = null;
-		for (Integer factor : factors) {
-			if (result == null) {
-				result = factor;
-			} else if (factor != null) {
+	public static Integer multiply(Integer firstFactor, Integer... furtherFactors) {
+		if (firstFactor == null) {
+			return null;
+		}
+		int result = firstFactor;
+		for (Integer factor : furtherFactors) {
+			if (factor != null) {
 				result *= factor;
 			}
 		}
@@ -704,6 +706,27 @@ public class TypeUtils {
 			return Double.NaN;
 		}
 		return sum / count;
+	}
+
+	/**
+	 * Safely finds the average value of all values.
+	 *
+	 * @param values the {@link Integer} values
+	 * @return the average value; or null if all values are null
+	 */
+	public static Integer averageInt(Integer... values) {
+		var count = 0;
+		float sum = 0;
+		for (Integer value : values) {
+			if (value != null) {
+				count++;
+				sum += value;
+			}
+		}
+		if (count == 0) {
+			return null;
+		}
+		return Math.round(sum / count);		
 	}
 
 	/**

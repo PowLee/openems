@@ -5,7 +5,7 @@ import { CookieService } from 'ngx-cookie-service';
 import { delay, retryWhen } from 'rxjs/operators';
 import { webSocket, WebSocketSubject } from 'rxjs/webSocket';
 import { environment } from "src/environments";
-import { Edge } from '../edge/edge';
+
 import { JsonrpcMessage, JsonrpcNotification, JsonrpcRequest, JsonrpcResponse, JsonrpcResponseError, JsonrpcResponseSuccess } from '../jsonrpc/base';
 import { CurrentDataNotification } from '../jsonrpc/notification/currentDataNotification';
 import { EdgeConfigNotification } from '../jsonrpc/notification/edgeConfigNotification';
@@ -17,18 +17,21 @@ import { EdgeRpcRequest } from '../jsonrpc/request/edgeRpcRequest';
 import { LogoutRequest } from '../jsonrpc/request/logoutRequest';
 import { RegisterUserRequest } from '../jsonrpc/request/registerUserRequest';
 import { AuthenticateResponse } from '../jsonrpc/response/authenticateResponse';
-import { LanguageTag } from '../translate/language';
-import { Role } from '../type/role';
+import { Language } from '../type/language';
+import { Pagination } from './pagination';
 import { Service } from './service';
+import { WebsocketInterface } from './websocketInterface';
 import { WsData } from './wsdata';
 
 @Injectable()
-export class Websocket {
+export class Websocket implements WebsocketInterface {
   private static readonly DEFAULT_EDGEID = 0;
   private readonly wsdata = new WsData();
 
   private socket: WebSocketSubject<any>;
-  public status: 'initial' // before first connection attempt
+
+  public status:
+    'initial' // before first connection attempt
     | 'connecting' // trying to connect to backend
     | 'authenticating' // sent authentication request; waiting for response
     | 'waiting for credentials' // login is required. Waiting for credentials input
@@ -41,6 +44,7 @@ export class Websocket {
     private translate: TranslateService,
     private cookieService: CookieService,
     private router: Router,
+    private pagination: Pagination
   ) {
     service.websocket = this;
 
@@ -65,8 +69,8 @@ export class Websocket {
     }
 
     /*
-     * Open Websocket connection + define onOpen/onClose callbacks.
-     */
+    * Open Websocket connection + define onOpen/onClose callbacks.
+    */
     this.socket = webSocket({
       url: environment.url,
       openObserver: {
@@ -78,8 +82,9 @@ export class Websocket {
           let token = this.cookieService.get('token');
           if (token) {
             // Login with Session Token
-            this.login(new AuthenticateWithTokenRequest({ token: token }));
+            this.login(new AuthenticateWithTokenRequest({ token: token }))
             this.status = 'authenticating';
+
           } else {
             // No Token -> directly ask for Login credentials
             this.status = 'waiting for credentials';
@@ -148,44 +153,58 @@ export class Websocket {
    * 
    * @param request the JSON-RPC Request
    */
-  public login(request: AuthenticateWithPasswordRequest | AuthenticateWithTokenRequest) {
-    this.sendRequest(request).then(r => {
-      let response = (r as AuthenticateResponse).result;
+  public login(request: AuthenticateWithPasswordRequest | AuthenticateWithTokenRequest): Promise<void> {
+    return new Promise<void>((resolve) => {
+      this.sendRequest(request).then(r => {
+        let authenticateResponse = (r as AuthenticateResponse).result;
 
-      localStorage.LANGUAGE = response.user.language;
-      this.service.setLang(LanguageTag[localStorage.LANGUAGE])
-      this.status = 'online';
+        let language = Language.getByKey(authenticateResponse.user.language.toLocaleLowerCase());
+        localStorage.LANGUAGE = language.key;
+        this.service.setLang(language);
+        this.status = 'online';
+        // received login token -> save in cookie
+        this.cookieService.set('token', authenticateResponse.token, { expires: 365, path: '/', sameSite: 'Strict' });
 
-      // received login token -> save in cookie
-      this.cookieService.set('token', response.token, { expires: 365, path: '/', sameSite: 'Strict' });
+        // Metadata
+        this.service.metadata.next({
+          user: authenticateResponse.user,
+          edges: {}
+        });
 
-      // Metadata
-      this.service.metadata.next({
-        user: response.user,
-        edges: response.edges.reduce((map, edge) => {
-          map[edge.id] = new Edge(
-            edge.id,
-            edge.comment,
-            edge.producttype,
-            ("version" in edge) ? edge["version"] : "0.0.0",
-            Role.getRole(edge.role),
-            edge.isOnline
-          );
-          return map;
-        }, {})
-      });
+        // Resubscribe Channels
+        this.service.getCurrentEdge().then(edge => {
 
-      // Resubscribe Channels
-      this.service.getCurrentEdge().then(edge => {
-        if (edge != null) {
-          edge.subscribeChannelsOnReconnect(this);
-        }
-      });
-
-    }).catch(reason => {
-      this.service.toast(this.translate.instant('Login.authenticationFailed'), 'danger');
-      this.onLoggedOut();
+          this.pagination.getAndSubscribeEdge(edge).then(() => {
+            edge.subscribeChannelsSuccessful = true;
+            if (edge != null) {
+              edge.subscribeChannelsOnReconnect(this);
+            }
+          })
+        });
+        resolve()
+      }).catch(reason => {
+        this.checkErrorCode(reason)
+        resolve()
+      })
     })
+  }
+
+  private checkErrorCode(reason: JsonrpcResponseError) {
+
+    // TODO create global Errorhandler for any type of error
+    switch (reason.error.code) {
+      case 1003:
+        this.service.toast(this.translate.instant('Login.authenticationFailed'), 'danger');
+        this.onLoggedOut()
+        break;
+      case 1:
+        this.service.toast(this.translate.instant("Login.REQUEST_TIMEOUT"), "danger")
+        this.status = 'waiting for credentials';
+        this.service.onLogout();
+        break;
+      default:
+        this.onLoggedOut()
+    }
   }
 
   /**
@@ -251,6 +270,27 @@ export class Websocket {
     } else {
       return Promise.reject("Websocket is not connected or authenticated! Unable to send Request: " + JSON.stringify(request));
     }
+  }
+
+  /**
+     * Waits until Websocket is 'online' and then 
+     * sends a safe JSON-RPC Request to a Websocket and promises a callback.
+     * 
+     * @param request the JSON-RPC Request
+     */
+  public sendSafeRequest(request: JsonrpcRequest): Promise<JsonrpcResponseSuccess> {
+    return new Promise<JsonrpcResponseSuccess>((resolve, reject) => {
+      let interval = setInterval(() => {
+
+        // TODO: Status should be Observable, furthermore status should be like state-machine
+        if (this.status == 'online') {
+          clearInterval(interval)
+          this.sendRequest(request)
+            .then((response) => resolve(response))
+            .catch((err) => reject(err))
+        }
+      }, 500)
+    })
   }
 
   /**

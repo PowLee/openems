@@ -1,7 +1,6 @@
 package io.openems.edge.app.timeofusetariff;
 
 import java.util.EnumMap;
-import java.util.List;
 
 import org.osgi.service.cm.ConfigurationAdmin;
 import org.osgi.service.component.ComponentContext;
@@ -12,13 +11,14 @@ import com.google.common.collect.Lists;
 import com.google.gson.JsonElement;
 
 import io.openems.common.exceptions.OpenemsError.OpenemsNamedException;
-import io.openems.common.function.ThrowingBiFunction;
+import io.openems.common.function.ThrowingTriFunction;
+import io.openems.common.session.Language;
 import io.openems.common.types.EdgeConfig;
-import io.openems.common.types.EdgeConfig.Component;
 import io.openems.common.utils.EnumUtils;
 import io.openems.common.utils.JsonUtils;
 import io.openems.edge.app.timeofusetariff.StromdaoCorrently.Property;
 import io.openems.edge.common.component.ComponentManager;
+import io.openems.edge.core.appmanager.AbstractEnumOpenemsApp;
 import io.openems.edge.core.appmanager.AbstractOpenemsApp;
 import io.openems.edge.core.appmanager.AppAssistant;
 import io.openems.edge.core.appmanager.AppConfiguration;
@@ -26,9 +26,11 @@ import io.openems.edge.core.appmanager.AppDescriptor;
 import io.openems.edge.core.appmanager.ComponentUtil;
 import io.openems.edge.core.appmanager.ConfigurationTarget;
 import io.openems.edge.core.appmanager.JsonFormlyUtil;
+import io.openems.edge.core.appmanager.Nameable;
 import io.openems.edge.core.appmanager.OpenemsApp;
 import io.openems.edge.core.appmanager.OpenemsAppCardinality;
 import io.openems.edge.core.appmanager.OpenemsAppCategory;
+import io.openems.edge.core.appmanager.TranslationUtil;
 
 /**
  * Describes a App for StromdaoCorrently.
@@ -45,17 +47,22 @@ import io.openems.edge.core.appmanager.OpenemsAppCategory;
     	"ZIP_CODE": "12345678"
     },
     "appDescriptor": {
+    	"websiteUrl": {@link AppDescriptor#getWebsiteUrl()}
     }
   }
  * </pre>
  */
-@org.osgi.service.component.annotations.Component(name = "App.TimeVariablePrice.Stromdao")
-public class StromdaoCorrently extends AbstractOpenemsApp<Property> implements OpenemsApp {
+@org.osgi.service.component.annotations.Component(name = "App.TimeOfUseTariff.Stromdao")
+public class StromdaoCorrently extends AbstractEnumOpenemsApp<Property> implements OpenemsApp {
 
-	public static enum Property {
+	public static enum Property implements Nameable {
+		// Component-IDs
 		CTRL_ESS_TIME_OF_USE_TARIF_DISCHARGE_ID, //
 		TIME_OF_USE_TARIF_ID, //
-		ZIP_CODE;
+		// Properties
+		ALIAS, //
+		ZIP_CODE //
+		;
 	}
 
 	@Activate
@@ -65,37 +72,39 @@ public class StromdaoCorrently extends AbstractOpenemsApp<Property> implements O
 	}
 
 	@Override
-	protected ThrowingBiFunction<ConfigurationTarget, EnumMap<Property, JsonElement>, AppConfiguration, OpenemsNamedException> appConfigurationFactory() {
-		return (t, p) -> {
-			var ctrlEssTimeOfUseTariffDischargeId = this.getId(t, p, Property.CTRL_ESS_TIME_OF_USE_TARIF_DISCHARGE_ID,
-					"ctrlEssTimeOfUseTariffDischarge0");
+	protected ThrowingTriFunction<ConfigurationTarget, EnumMap<Property, JsonElement>, Language, AppConfiguration, OpenemsNamedException> appConfigurationFactory() {
+		return (t, p, l) -> {
+			final var alias = this.getValueOrDefault(p, Property.ALIAS, this.getName(l));
+			final var zipCode = EnumUtils.getAsString(p, Property.ZIP_CODE);
 
-			var timeOfUseTariffId = this.getId(t, p, Property.TIME_OF_USE_TARIF_ID, "timeOfUseTariff0");
-
-			var zipCode = EnumUtils.getAsString(p, Property.ZIP_CODE);
+			final var ctrlEssTimeOfUseTariffDischargeId = this.getId(t, p,
+					Property.CTRL_ESS_TIME_OF_USE_TARIF_DISCHARGE_ID, "ctrlEssTimeOfUseTariffDischarge0");
+			final var timeOfUseTariffId = this.getId(t, p, Property.TIME_OF_USE_TARIF_ID, "timeOfUseTariff0");
 
 			// TODO ess id may be changed
-			List<Component> comp = Lists.newArrayList(//
-					new EdgeConfig.Component(ctrlEssTimeOfUseTariffDischargeId, this.getName(),
+			var comp = Lists.newArrayList(//
+					new EdgeConfig.Component(ctrlEssTimeOfUseTariffDischargeId, alias,
 							"Controller.Ess.Time-Of-Use-Tariff.Discharge", JsonUtils.buildJsonObject() //
 									.addProperty("ess.id", "ess0") //
 									.build()), //
-					new EdgeConfig.Component(timeOfUseTariffId, "timeOfUseTariff0", "TimeOfUseTariff.Corrently",
+					new EdgeConfig.Component(timeOfUseTariffId, this.getName(l), "TimeOfUseTariff.Corrently",
 							JsonUtils.buildJsonObject() //
 									.addProperty("zipcode", zipCode) //
 									.build())//
 			);
-			return new AppConfiguration(comp, Lists.newArrayList("ctrlEssTimeOfUseTariffDischarge0", "ctrlBalancing0"));
+			return new AppConfiguration(comp, Lists.newArrayList(ctrlEssTimeOfUseTariffDischargeId, "ctrlBalancing0"));
 		};
 	}
 
 	@Override
-	public AppAssistant getAppAssistant() {
-		return AppAssistant.create(this.getName()) //
+	public AppAssistant getAppAssistant(Language language) {
+		var bundle = AbstractOpenemsApp.getTranslationBundle(language);
+		return AppAssistant.create(this.getName(language)) //
 				.fields(JsonUtils.buildJsonArray() //
 						.add(JsonFormlyUtil.buildInput(Property.ZIP_CODE) //
-								.setLabel("ZIP Code") //
-								.setDescription("German ZIP Code of the location.") //
+								.setLabel(TranslationUtil.getTranslation(bundle, this.getAppId() + ".zipCode.label")) //
+								.setDescription(TranslationUtil.getTranslation(bundle,
+										this.getAppId() + ".zipCode.description")) //
 								.isRequired(true) //
 								.build()) //
 						.build()) //
@@ -109,18 +118,8 @@ public class StromdaoCorrently extends AbstractOpenemsApp<Property> implements O
 	}
 
 	@Override
-	public OpenemsAppCategory[] getCategorys() {
+	public OpenemsAppCategory[] getCategories() {
 		return new OpenemsAppCategory[] { OpenemsAppCategory.TIME_OF_USE_TARIFF };
-	}
-
-	@Override
-	public String getImage() {
-		return OpenemsApp.FALLBACK_IMAGE;
-	}
-
-	@Override
-	public String getName() {
-		return "Stromdao Corrently";
 	}
 
 	@Override

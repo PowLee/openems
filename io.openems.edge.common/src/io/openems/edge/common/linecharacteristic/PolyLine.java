@@ -26,11 +26,25 @@ public class PolyLine {
 		private Builder() {
 		}
 
+		/**
+		 * Add a point to the {@link PolyLine} {@link Builder}.
+		 * 
+		 * @param x the x value
+		 * @param y the y value
+		 * @return myself
+		 */
 		public Builder addPoint(double x, Double y) {
 			this.points.put(x, y);
 			return this;
 		}
 
+		/**
+		 * Add a point to the {@link PolyLine} {@link Builder}.
+		 * 
+		 * @param x the x value
+		 * @param y the y value
+		 * @return myself
+		 */
 		public Builder addPoint(double x, double y) {
 			this.points.put(x, y);
 			return this;
@@ -193,6 +207,14 @@ public class PolyLine {
 		return this.getValue(TypeUtils.toDouble(x));
 	}
 
+	/**
+	 * Prints a {@link PolyLine} in CSV format.
+	 * 
+	 * <p>
+	 * Use this method to visualize the {@link PolyLine} in a spreadsheet.
+	 * 
+	 * @param polyLine the {@link PolyLine}
+	 */
 	public static void printAsCsv(PolyLine polyLine) {
 		System.out.println("x;y");
 		for (Entry<Double, Double> point : polyLine.points.entrySet()) {

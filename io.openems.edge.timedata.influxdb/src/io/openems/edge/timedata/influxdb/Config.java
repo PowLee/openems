@@ -3,7 +3,9 @@ package io.openems.edge.timedata.influxdb;
 import org.osgi.service.metatype.annotations.AttributeDefinition;
 import org.osgi.service.metatype.annotations.ObjectClassDefinition;
 
-@ObjectClassDefinition( //
+import io.openems.shared.influxdb.QueryLanguageConfig;
+
+@ObjectClassDefinition(//
 		name = "Timedata InfluxDB", //
 		description = "This component persists all data to an InfluxDB timeseries database.")
 @interface Config {
@@ -17,20 +19,26 @@ import org.osgi.service.metatype.annotations.ObjectClassDefinition;
 	@AttributeDefinition(name = "Is enabled?", description = "Is this Component enabled?")
 	boolean enabled() default true;
 
-	@AttributeDefinition(name = "URL", description = "The InfluxDB URL, e.g.: http://ip:port")
-	String url();
+	@AttributeDefinition(name = "Query language", description = "Query language Flux or InfluxQL")
+	QueryLanguageConfig queryLanguage() default QueryLanguageConfig.INFLUX_QL;
 
-	@AttributeDefinition(name = "Org", description = "The Organisation; '-' for InfluxDB v1")
+	@AttributeDefinition(name = "URL", description = "The InfluxDB URL, e.g.: http://localhost:8086")
+	String url() default "http://localhost:8086";
+
+	@AttributeDefinition(name = "Org", description = "The Organisation; for InfluxDB v1: '-'")
 	String org() default "-";
-	
-	@AttributeDefinition(name = "ApiKey", description = "The ApiKey; 'username:password' for InfluxDB v1")
+
+	@AttributeDefinition(name = "ApiKey", description = "The ApiKey; for InfluxDB v1: 'username:password', e.g. 'admin:admin'")
 	String apiKey();
 
-	@AttributeDefinition(name = "Bucket", description = "The bucket name; 'database/retentionPolicy' for InfluxDB v1")
+	@AttributeDefinition(name = "Bucket", description = "The bucket name; for InfluxDB v1: 'database/retentionPolicy', e.g. 'db/data'")
 	String bucket();
-	
+
 	@AttributeDefinition(name = "No of Cycles", description = "How many Cycles till data is written to InfluxDB.")
 	int noOfCycles() default 1;
+
+	@AttributeDefinition(name = "Number of max scheduled tasks", description = "Max-Size of Queued tasks.")
+	int maxQueueSize() default 5000;
 
 	@AttributeDefinition(name = "Read-Only mode", description = "Activates the read-only mode. Then no data is written to InfluxDB.")
 	boolean isReadOnly() default false;

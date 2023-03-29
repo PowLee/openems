@@ -82,8 +82,8 @@ import io.openems.edge.timedata.api.Timedata;
 public class SimulatorApp extends AbstractOpenemsComponent
 		implements SimulatorDatasource, ClockProvider, OpenemsComponent, JsonApi, EventHandler, Timedata {
 
-	public final static String SINGLETON_SERVICE_PID = "Simulator.App";
-	public final static String SINGLETON_COMPONENT_ID = "_simulator";
+	public static final String SINGLETON_SERVICE_PID = "Simulator.App";
+	public static final String SINGLETON_COMPONENT_ID = "_simulator";
 
 	private static final long MILLISECONDS_BETWEEN_LOGS = 5_000;
 
@@ -148,8 +148,18 @@ public class SimulatorApp extends AbstractOpenemsComponent
 	}
 
 	@Activate
-	void activate(ComponentContext componentContext, Config config) throws OpenemsException {
+	private void activate(ComponentContext componentContext, Config config) throws OpenemsException {
 		super.activate(componentContext, SINGLETON_COMPONENT_ID, SINGLETON_SERVICE_PID, config.enabled());
+
+		if (OpenemsComponent.validateSingleton(this.cm, SINGLETON_SERVICE_PID, SINGLETON_COMPONENT_ID)) {
+			return;
+		}
+	}
+
+	@Activate
+	private void modified(ComponentContext componentContext, Config config) throws OpenemsException {
+		super.modified(componentContext, SINGLETON_COMPONENT_ID, SINGLETON_SERVICE_PID, config.enabled());
+
 		if (OpenemsComponent.validateSingleton(this.cm, SINGLETON_SERVICE_PID, SINGLETON_COMPONENT_ID)) {
 			return;
 		}

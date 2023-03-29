@@ -1,14 +1,12 @@
 import { NgModule } from '@angular/core';
 import { SharedModule } from '../../shared/shared.module';
-import { AutarchyChartOverviewComponent } from './autarchy/autarchychartoverview/autarchychartoverview.component';
-import { AutarchyChartComponent } from './autarchy/chart.component';
-import { AutarchyWidgetComponent } from './autarchy/widget.component';
 import { ChannelthresholdChartOverviewComponent } from './channelthreshold/channelthresholdchartoverview/channelthresholdchartoverview.component';
 import { ChannelthresholdSingleChartComponent } from './channelthreshold/singlechart.component';
 import { ChannelthresholdTotalChartComponent } from './channelthreshold/totalchart.component';
 import { ChannelthresholdWidgetComponent } from './channelthreshold/widget.component';
 import { ChpSocChartComponent } from './chpsoc/chart.component';
 import { ChpSocWidgetComponent } from './chpsoc/widget.component';
+import { Autarchy } from './common/autarchy/Autarchy';
 import { ConsumptionChartOverviewComponent } from './consumption/consumptionchartoverview/consumptionchartoverview.component';
 import { ConsumptionEvcsChartComponent } from './consumption/evcschart.component';
 import { ConsumptionMeterChartComponent } from './consumption/meterchart.component';
@@ -39,6 +37,7 @@ import { HeatPumpChartComponent } from './heatpump/chart.component';
 import { HeatPumpChartOverviewComponent } from './heatpump/heatpumpchartoverview/heatpumpchartoverview.component';
 import { HeatpumpWidgetComponent } from './heatpump/widget.component';
 import { HistoryComponent } from './history.component';
+import { HistoryParentComponent } from './historyparent.component';
 import { AsymmetricPeakshavingChartOverviewComponent } from './peakshaving/asymmetric/asymmetricpeakshavingchartoverview/asymmetricpeakshavingchartoverview.component';
 import { AsymmetricPeakshavingChartComponent } from './peakshaving/asymmetric/chart.component';
 import { AsymmetricPeakshavingWidgetComponent } from './peakshaving/asymmetric/widget.component';
@@ -76,6 +75,7 @@ import { TimeOfUseTariffDischargeWidgetComponent } from './timeofusetariffdischa
 @NgModule({
   imports: [
     SharedModule,
+    Autarchy
   ],
   entryComponents: [
     EnergyModalComponent,
@@ -84,9 +84,6 @@ import { TimeOfUseTariffDischargeWidgetComponent } from './timeofusetariffdischa
     AsymmetricPeakshavingChartComponent,
     AsymmetricPeakshavingChartOverviewComponent,
     AsymmetricPeakshavingWidgetComponent,
-    AutarchyChartComponent,
-    AutarchyChartOverviewComponent,
-    AutarchyWidgetComponent,
     ChannelthresholdChartOverviewComponent,
     ChannelthresholdSingleChartComponent,
     ChannelthresholdTotalChartComponent,
@@ -153,6 +150,7 @@ import { TimeOfUseTariffDischargeWidgetComponent } from './timeofusetariffdischa
     TimeslotPeakshavingChartComponent,
     TimeslotPeakshavingChartOverviewComponent,
     TimeslotPeakshavingWidgetComponent,
+    HistoryParentComponent,
   ]
 })
 export class HistoryModule { }

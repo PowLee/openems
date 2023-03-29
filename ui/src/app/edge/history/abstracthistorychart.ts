@@ -1,22 +1,21 @@
 import { Data } from '@angular/router';
 import { TranslateService } from '@ngx-translate/core';
 import { ChartDataSets } from 'chart.js';
-import { addDays, addMonths, differenceInDays, differenceInMonths } from 'date-fns';
-import { queryHistoricTimeseriesEnergyPerPeriodRequest } from 'src/app/shared/jsonrpc/request/queryHistoricTimeseriesEnergyPerPeriodRequest';
-import { queryHistoricTimeseriesEnergyPerPeriodResponse } from 'src/app/shared/jsonrpc/response/queryHistoricTimeseriesEnergyPerPeriodResponse';
-import { DefaultTypes } from 'src/app/shared/service/defaulttypes';
-import { JsonrpcResponseError } from "../../shared/jsonrpc/base";
-import { QueryHistoricTimeseriesDataRequest } from "../../shared/jsonrpc/request/queryHistoricTimeseriesDataRequest";
-import { QueryHistoricTimeseriesDataResponse } from "../../shared/jsonrpc/response/queryHistoricTimeseriesDataResponse";
-import { ChannelAddress, Edge, EdgeConfig, Service, Utils } from "../../shared/shared";
+import { differenceInDays, differenceInMonths } from 'date-fns';
+import { JsonrpcResponseError } from 'src/app/shared/jsonrpc/base';
+import { QueryHistoricTimeseriesDataRequest } from "src/app/shared/jsonrpc/request/queryHistoricTimeseriesDataRequest";
+import { QueryHistoricTimeseriesEnergyPerPeriodRequest } from 'src/app/shared/jsonrpc/request/queryHistoricTimeseriesEnergyPerPeriodRequest';
+import { QueryHistoricTimeseriesDataResponse } from "src/app/shared/jsonrpc/response/queryHistoricTimeseriesDataResponse";
+import { QueryHistoricTimeseriesEnergyPerPeriodResponse } from 'src/app/shared/jsonrpc/response/queryHistoricTimeseriesEnergyPerPeriodResponse';
+import { ChannelAddress, Edge, EdgeConfig, Service, Utils } from "src/app/shared/shared";
 import { calculateResolution, ChartOptions, DEFAULT_TIME_CHART_OPTIONS, EMPTY_DATASET, Resolution, TooltipItem } from './shared';
 
 // NOTE: Auto-refresh of widgets is currently disabled to reduce server load
 export abstract class AbstractHistoryChart {
 
     public loading: boolean = true;
-    public spinnerId: string = "";
     protected edge: Edge | null = null;
+    protected errorResponse: JsonrpcResponseError | null = null;
 
     //observable is used to fetch new chart data every 10 minutes
     // private refreshChartData = interval(600000);
@@ -28,7 +27,7 @@ export abstract class AbstractHistoryChart {
 
     public labels: Date[] = [];
     public datasets: ChartDataSets[] = EMPTY_DATASET;
-    public options: ChartOptions | null = null;
+    public options: ChartOptions | null = DEFAULT_TIME_CHART_OPTIONS;
     public colors = []
     // prevents subscribing more than once
     protected hasSubscribed: boolean = false;
@@ -48,8 +47,9 @@ export abstract class AbstractHistoryChart {
     }
 
     constructor(
+        public readonly spinnerId: string,
         protected service: Service,
-        protected translate: TranslateService
+        protected translate: TranslateService,
     ) {
     }
 
@@ -75,24 +75,36 @@ export abstract class AbstractHistoryChart {
         // Take custom resolution if passed
         let resolution = res ?? calculateResolution(this.service, fromDate, toDate).resolution;
 
-        return new Promise((resolve, reject) => {
+        this.errorResponse = null;
+
+        let result: Promise<QueryHistoricTimeseriesDataResponse> = new Promise<QueryHistoricTimeseriesDataResponse>((resolve, reject) => {
             this.service.getCurrentEdge().then(edge => {
                 this.service.getConfig().then(config => {
                     this.setLabel(config);
                     this.getChannelAddresses(edge, config).then(channelAddresses => {
+
                         let request = new QueryHistoricTimeseriesDataRequest(fromDate, toDate, channelAddresses, resolution);
                         edge.sendRequest(this.service.websocket, request).then(response => {
-                            let result = (response as QueryHistoricTimeseriesDataResponse).result;
-                            if (Object.keys(result.data).length != 0 && Object.keys(result.timestamps).length != 0) {
-                                resolve(response as QueryHistoricTimeseriesDataResponse);
-                            } else {
-                                reject(new JsonrpcResponseError(response.id, { code: 0, message: "Result was empty" }));
-                            }
-                        }).catch(reason => reject(reason));
-                    }).catch(reason => reject(reason));
+                            resolve(response as QueryHistoricTimeseriesDataResponse);
+                        }).catch(error => {
+                            this.errorResponse = error;
+                            resolve(new QueryHistoricTimeseriesDataResponse(error.id, {
+                                timestamps: [null], data: { null: null }
+                            }))
+                        });
+                    });
                 })
-            });
-        });
+            })
+        }).then((response) => {
+            if (Utils.isDataEmpty(response)) {
+                this.loading = false;
+                this.service.stopSpinner(this.spinnerId)
+                this.initializeChart()
+            }
+            return response
+        })
+
+        return result
     }
 
     /**
@@ -102,26 +114,37 @@ export abstract class AbstractHistoryChart {
      * @param toDate   the To-Date
      * @param channelAddresses       the Channel-Addresses
      */
-    protected queryHistoricTimeseriesEnergyPerPeriod(fromDate: Date, toDate: Date, channelAddresses: ChannelAddress[]): Promise<queryHistoricTimeseriesEnergyPerPeriodResponse> {
+    protected queryHistoricTimeseriesEnergyPerPeriod(fromDate: Date, toDate: Date, channelAddresses: ChannelAddress[]): Promise<QueryHistoricTimeseriesEnergyPerPeriodResponse> {
 
         // TODO should be removed, edge delivers too much data 
         let resolution = calculateResolution(this.service, fromDate, toDate).resolution;
 
-        return new Promise((resolve, reject) => {
+        this.errorResponse = null;
+
+        let response: Promise<QueryHistoricTimeseriesEnergyPerPeriodResponse> = new Promise<QueryHistoricTimeseriesEnergyPerPeriodResponse>((resolve, reject) => {
             this.service.getCurrentEdge().then(edge => {
                 this.service.getConfig().then(config => {
-                    edge.sendRequest(this.service.websocket, new queryHistoricTimeseriesEnergyPerPeriodRequest(fromDate, toDate, channelAddresses, resolution)).then(response => {
-                        let result = (response as QueryHistoricTimeseriesDataResponse).result;
-
-                        if (Object.keys(result).length != 0) {
-                            resolve(response as queryHistoricTimeseriesEnergyPerPeriodResponse);
-                        } else {
-                            reject(new JsonrpcResponseError(response.id, { code: 0, message: "Result was empty" }));
-                        }
-                    }).catch(reason => reject(reason));
-                })
+                    edge.sendRequest(this.service.websocket, new QueryHistoricTimeseriesEnergyPerPeriodRequest(fromDate, toDate, channelAddresses, resolution)).then(response => {
+                        resolve(response as QueryHistoricTimeseriesEnergyPerPeriodResponse ?? new QueryHistoricTimeseriesEnergyPerPeriodResponse(response.id, {
+                            timestamps: [null], data: { null: null }
+                        }))
+                    }).catch((response) => {
+                        this.errorResponse = response;
+                        resolve(new QueryHistoricTimeseriesDataResponse("0", {
+                            timestamps: [null], data: { null: null }
+                        }))
+                    });
+                });
             });
-        });
+        }).then((response) => {
+            if (Utils.isDataEmpty(response)) {
+                this.loading = false;
+                this.service.stopSpinner(this.spinnerId)
+                this.initializeChart();
+            }
+            return response
+        })
+        return response;
     }
 
     /**
@@ -230,11 +253,33 @@ export abstract class AbstractHistoryChart {
         this.datasets = EMPTY_DATASET;
         this.labels = [];
         this.loading = false;
-        this.service.stopSpinner(this.spinnerId);
+        this.stopSpinner();
     }
 
     /**
      * Sets Chart Height
      */
-    protected abstract getChartHeight()
+    protected abstract getChartHeight();
+
+    /**
+     * Start NGX-Spinner
+     * 
+     * Spinner will appear inside html tag only
+     * 
+     * @example <ngx-spinner name="YOURSELECTOR"></ngx-spinner>
+     * 
+     * @param selector selector for specific spinner
+     */
+    public startSpinner() {
+        this.service.startSpinner(this.spinnerId);
+    }
+
+    /**
+     * Stop NGX-Spinner
+     * @param selector selector for specific spinner
+     */
+    public stopSpinner() {
+        this.service.stopSpinner(this.spinnerId);
+    }
+
 }

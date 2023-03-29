@@ -1,6 +1,7 @@
 package io.openems.edge.core.appmanager;
 
 import java.util.List;
+import java.util.Optional;
 
 import io.openems.common.exceptions.OpenemsError.OpenemsNamedException;
 import io.openems.common.types.EdgeConfig;
@@ -28,6 +29,14 @@ public interface ComponentUtil {
 	 * @return true if a component has the given String in its configuration
 	 */
 	public boolean anyComponentUses(String value, List<String> ignoreIds);
+
+	/**
+	 * Gets a list of current Relays. e. g. 'io0/Relay1'
+	 *
+	 * @return a list of Relays
+	 * @throws OpenemsNamedException on error
+	 */
+	public List<Relay> getAllRelays();
 
 	/**
 	 * Gets a list of currently available Relays of IOs which are not used by any
@@ -103,14 +112,30 @@ public interface ComponentUtil {
 	/**
 	 * Gets the next available id with the baseName.
 	 *
-	 * @param baseName   like ess, meter without a number
-	 * @param components the used components from the other apps, because if the
-	 *                   user updates multiple instances very quickly and components
-	 *                   of the same type are created they are not instantly added
-	 *                   to the componentManager
+	 * @param baseName     like ess, meter without a number
+	 * @param componentIds the used componentIds from the other apps, because if the
+	 *                     user updates multiple instances very quickly and
+	 *                     components of the same type are created they are not
+	 *                     instantly added to the componentManager
 	 * @return the id
 	 */
-	public String getNextAvailableId(String baseName, List<Component> components);
+	public default String getNextAvailableId(String baseName, List<String> componentIds) {
+		return this.getNextAvailableId(baseName, 0, componentIds);
+	}
+
+	/**
+	 * Gets the next available id with the baseName starting with the given
+	 * startingNumber.
+	 *
+	 * @param baseName       like ess, meter without a number
+	 * @param startingNumber the number at the end of the id to start from
+	 * @param componentIds   the used componentIds from the other apps, because if
+	 *                       the user updates multiple instances very quickly and
+	 *                       components of the same type are created they are not
+	 *                       instantly added to the componentManager
+	 * @return the id
+	 */
+	public String getNextAvailableId(String baseName, int startingNumber, List<String> componentIds);
 
 	/**
 	 * Gets the preferred relays. If the default ports are are already taken the
@@ -199,6 +224,15 @@ public interface ComponentUtil {
 	 * @param oldIps the old ip s that were in the old configuration
 	 * @throws OpenemsNamedException on error
 	 */
-	public void updateHosts(User user, List<String> ips, List<String> oldIps) throws OpenemsNamedException;
+	public void updateHosts(User user, List<InterfaceConfiguration> ips, List<InterfaceConfiguration> oldIps)
+			throws OpenemsNamedException;
 
+	/**
+	 * Gets an {@link Optional} of an {@link EdgeConfig.Component}.
+	 *
+	 * @param id        the id of the component
+	 * @param factoryId the factoryId of the component
+	 * @return the optional component
+	 */
+	public Optional<EdgeConfig.Component> getComponent(String id, String factoryId);
 }
