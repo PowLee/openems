@@ -35,10 +35,13 @@ jobs:
       - uses: kiancross/checkstyle-annotations-action@v1
       
       - name: Build all Java packages
+        run: ./gradlew build
+        
+      - name: Analyze
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Needed to get PR information, if any
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: ./gradlew build
+        run: ./gradlew build sonarqube --info
 
       - name: Resolve OpenEMS bundles
         run: ./gradlew resolve
