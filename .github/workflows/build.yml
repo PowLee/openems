@@ -35,6 +35,9 @@ jobs:
       - uses: kiancross/checkstyle-annotations-action@v1
       
       - name: Build all Java packages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Needed to get PR information, if any
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: ./gradlew build
 
       - name: Resolve OpenEMS bundles
